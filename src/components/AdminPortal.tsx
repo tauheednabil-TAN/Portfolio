@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { BlogPost, RoadmapNode, Booking, KnowledgeChunk, Settings } from "../types.js";
-import { Lock, Eye, EyeOff, Save, Trash2, Calendar, BookOpen, Layers, Database, Settings as SettingsIcon, LogOut, Plus, Check, X, Shield } from "lucide-react";
+import { Lock, Eye, EyeOff, Save, Trash2, Calendar, BookOpen, Layers, Database, Settings as SettingsIcon, LogOut, Plus, Check, X, Shield, Upload } from "lucide-react";
 
 export default function AdminPortal() {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem("nabil_admin_token"));
@@ -23,6 +23,112 @@ export default function AdminPortal() {
 
   const [loading, setLoading] = useState(false);
   const [actionStatus, setActionStatus] = useState("");
+
+  // Intelligent Document RAG Upload States
+  const [isUploading, setIsUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileChange(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileChange = async (file: File) => {
+    if (!file) return;
+
+    const validExtensions = [".pdf", ".docx", ".txt"];
+    const fileNameLower = file.name.toLowerCase();
+    const isValidExt = validExtensions.some(ext => fileNameLower.endsWith(ext));
+
+    if (!isValidExt) {
+      setUploadError("Invalid file type. Please upload a PDF, DOCX, or TXT file.");
+      setUploadSuccess("");
+      return;
+    }
+
+    setUploadError("");
+    setUploadSuccess("");
+    setIsUploading(true);
+    setActionStatus(`Reading ${file.name}...`);
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const base64WithMime = e.target?.result as string;
+        if (!base64WithMime) {
+          throw new Error("Failed to read file.");
+        }
+
+        const base64Data = base64WithMime.split(",")[1];
+        let mimeType = file.type;
+        if (!mimeType) {
+          if (fileNameLower.endsWith(".docx")) {
+            mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          } else if (fileNameLower.endsWith(".pdf")) {
+            mimeType = "application/pdf";
+          } else {
+            mimeType = "text/plain";
+          }
+        }
+
+        setActionStatus(`Parsing ${file.name} with Gemini...`);
+
+        const res = await fetch("/api/admin/parse-document", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            base64Data,
+            mimeType,
+            fileName: file.name
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          setUploadSuccess(data.message);
+          setActionStatus("Document parsed successfully!");
+          loadAdminData();
+        } else {
+          setUploadError(data.error || "Failed to process the document.");
+          setActionStatus("Parsing failed.");
+        }
+      } catch (err: any) {
+        console.error(err);
+        setUploadError(err.message || "Error reading file.");
+        setActionStatus("Parsing failed.");
+      } finally {
+        setIsUploading(false);
+      }
+    };
+
+    reader.onerror = () => {
+      setUploadError("Error reading file.");
+      setIsUploading(false);
+    };
+
+    reader.readAsDataURL(file);
+  };
 
   useEffect(() => {
     if (token) {
@@ -767,58 +873,133 @@ export default function AdminPortal() {
             {/* RAG BRAIN TAB */}
             {activeTab === "knowledge" && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-comic-pop">
-                {/* Form column */}
-                <form onSubmit={handleAddChunk} className="lg:col-span-1 space-y-4 bg-cafe-50/50 border border-cafe-200 p-4 rounded-xl">
-                  <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase border-b border-cafe-200 pb-1.5">Add Context Block</h3>
+                {/* Form and Uploader column */}
+                <div className="lg:col-span-1 space-y-6">
+                  {/* Instant RAG Document Parser Card */}
+                  <div className="bg-cafe-50/50 border border-cafe-200 p-4 rounded-xl space-y-4 shadow-sm">
+                    <div className="border-b border-cafe-200 pb-2 flex items-center justify-between">
+                      <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase flex items-center gap-1.5">
+                        <span>Instant RAG Upload 📄</span>
+                      </h3>
+                      <span className="text-[9px] font-bold font-mono bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-md border border-amber-500/20 uppercase">
+                        AI Powered
+                      </span>
+                    </div>
+                    
+                    <p className="text-[11px] text-cafe-700 leading-normal font-sans">
+                      Upload a detailed <strong>PDF</strong>, <strong>Word file (.docx)</strong>, or <strong>Text file (.txt)</strong> containing resume data, project sheets, or customized instructions. Gemini will parse, format, and save the data as searchable context instantly.
+                    </p>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Category</label>
-                    <select
-                      value={chunkForm.category}
-                      onChange={(e) => setChunkForm({ ...chunkForm, category: e.target.value as any })}
-                      className="w-full px-3 py-1.5 border border-cafe-300 rounded-lg text-xs font-sans"
+                    <div
+                      onDragEnter={handleDrag}
+                      onDragOver={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDrop={handleDrop}
+                      className={`border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                        dragActive
+                          ? "border-amber-500 bg-amber-500/10"
+                          : "border-cafe-300 hover:border-cafe-400 bg-white/40"
+                      }`}
                     >
-                      <option value="about">About Nabil 🧑</option>
-                      <option value="education">Education 🎓</option>
-                      <option value="skills">Skills 💻</option>
-                      <option value="projects">Projects 🛠️</option>
-                      <option value="experience">Experience 💼</option>
-                      <option value="faq">FAQ / Certifications 📖</option>
-                      <option value="other">Other ☕</option>
-                    </select>
+                      <input
+                        type="file"
+                        id="rag-file-input"
+                        className="hidden"
+                        accept=".pdf,.docx,.txt"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleFileChange(e.target.files[0]);
+                          }
+                        }}
+                        disabled={isUploading}
+                      />
+                      
+                      <label htmlFor="rag-file-input" className="cursor-pointer flex flex-col items-center w-full">
+                        <Upload className={`w-8 h-8 mb-2 ${isUploading ? "text-amber-500 animate-bounce" : "text-cafe-600"}`} />
+                        <span className="text-xs font-bold text-cafe-900 font-sans">
+                          {isUploading ? "Processing Document..." : "Drag & Drop file here"}
+                        </span>
+                        <span className="text-[10px] text-cafe-600 mt-1 font-mono">
+                          Supports PDF, DOCX, or TXT
+                        </span>
+                      </label>
+                    </div>
+
+                    {isUploading && (
+                      <div className="text-center py-2 bg-amber-500/5 border border-amber-500/10 rounded-lg">
+                        <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-1.5" />
+                        <span className="text-[10px] font-mono text-amber-600 animate-pulse font-bold">
+                          Gemini extracting & segmenting text...
+                        </span>
+                      </div>
+                    )}
+
+                    {uploadError && (
+                      <div className="bg-red-50 border border-red-200 text-red-700 p-2.5 rounded-lg text-[10px] font-mono leading-relaxed">
+                        ⚠️ {uploadError}
+                      </div>
+                    )}
+
+                    {uploadSuccess && (
+                      <div className="bg-green-50 border border-green-200 text-green-700 p-2.5 rounded-lg text-[10px] font-sans leading-relaxed font-semibold">
+                        🎉 {uploadSuccess}
+                      </div>
+                    )}
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Source Label</label>
-                    <input
-                      type="text"
-                      required
-                      value={chunkForm.source}
-                      onChange={(e) => setChunkForm({ ...chunkForm, source: e.target.value })}
-                      placeholder="e.g. CV Certifications Section"
-                      className="w-full px-3 py-1.5 border border-cafe-300 rounded-lg text-xs font-sans"
-                    />
-                  </div>
+                  {/* Manual entry block */}
+                  <form onSubmit={handleAddChunk} className="space-y-4 bg-cafe-50/50 border border-cafe-200 p-4 rounded-xl shadow-sm">
+                    <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase border-b border-cafe-200 pb-1.5">Add Context Block Manually</h3>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Content Text Block</label>
-                    <textarea
-                      required
-                      rows={6}
-                      value={chunkForm.content}
-                      onChange={(e) => setChunkForm({ ...chunkForm, content: e.target.value })}
-                      placeholder="Paste detailed biography, skills details or FAQ answers..."
-                      className="w-full px-3 py-1.5 border border-cafe-300 rounded-lg text-xs font-sans resize-none"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Category</label>
+                      <select
+                        value={chunkForm.category}
+                        onChange={(e) => setChunkForm({ ...chunkForm, category: e.target.value as any })}
+                        className="w-full px-3 py-1.5 border border-cafe-300 rounded-lg text-xs font-sans"
+                      >
+                        <option value="about">About Nabil 🧑</option>
+                        <option value="education">Education 🎓</option>
+                        <option value="skills">Skills 💻</option>
+                        <option value="projects">Projects 🛠️</option>
+                        <option value="experience">Experience 💼</option>
+                        <option value="faq">FAQ / Certifications 📖</option>
+                        <option value="other">Other ☕</option>
+                      </select>
+                    </div>
 
-                  <button
-                    type="submit"
-                    className="w-full py-2 bg-cafe-700 text-white font-bold rounded-lg hover:bg-cafe-800 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" /> Add to Brain
-                  </button>
-                </form>
+                    <div>
+                      <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Source Label</label>
+                      <input
+                        type="text"
+                        required
+                        value={chunkForm.source}
+                        onChange={(e) => setChunkForm({ ...chunkForm, source: e.target.value })}
+                        placeholder="e.g. CV Certifications Section"
+                        className="w-full px-3 py-1.5 border border-cafe-300 rounded-lg text-xs font-sans"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Content Text Block</label>
+                      <textarea
+                        required
+                        rows={5}
+                        value={chunkForm.content}
+                        onChange={(e) => setChunkForm({ ...chunkForm, content: e.target.value })}
+                        placeholder="Paste detailed biography, skills details or FAQ answers..."
+                        className="w-full px-3 py-1.5 border border-cafe-300 rounded-lg text-xs font-sans resize-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="w-full py-2 bg-cafe-700 text-white font-bold rounded-lg hover:bg-cafe-800 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" /> Add to Brain
+                    </button>
+                  </form>
+                </div>
 
                 {/* List column */}
                 <div className="lg:col-span-2 space-y-4">

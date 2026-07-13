@@ -2,8 +2,9 @@ import express from "express";
 import path from "path";
 import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import mammoth from "mammoth";
 
 // Load environment variables
 dotenv.config();
@@ -512,6 +513,142 @@ app.post("/api/knowledge", adminRequired, async (req, res) => {
 app.delete("/api/knowledge/:id", adminRequired, async (req, res) => {
   const success = await deleteChunk(req.params.id);
   res.json({ success });
+});
+
+// Intelligent Document Processing Endpoint (PDF, DOCX, TXT)
+app.post("/api/admin/parse-document", adminRequired, async (req, res) => {
+  const { base64Data, mimeType, fileName } = req.body;
+  if (!base64Data || !mimeType) {
+    return res.status(400).json({ error: "Missing file data or mimeType" });
+  }
+
+  const ai = getGeminiClient();
+  if (!ai) {
+    return res.status(500).json({ error: "Gemini API client not initialized. Check your GEMINI_API_KEY." });
+  }
+
+  try {
+    let textToChunk = "";
+    let isDirectPDF = false;
+
+    // Check file type
+    if (mimeType === "application/pdf") {
+      isDirectPDF = true;
+    } else if (
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      fileName?.endsWith(".docx")
+    ) {
+      // Decode base64 to buffer and parse docx
+      const docBuffer = Buffer.from(base64Data, "base64");
+      const result = await mammoth.extractRawText({ buffer: docBuffer });
+      textToChunk = result.value;
+    } else if (mimeType.startsWith("text/") || fileName?.endsWith(".txt")) {
+      textToChunk = Buffer.from(base64Data, "base64").toString("utf-8");
+    } else {
+      return res.status(400).json({ error: "Unsupported file type. Please upload a PDF, DOCX, or TXT file." });
+    }
+
+    let parsedChunks: any[] = [];
+
+    if (isDirectPDF) {
+      // Send PDF bytes directly to Gemini to chunk and categorize
+      const pdfPart = {
+        inlineData: {
+          mimeType: "application/pdf",
+          data: base64Data,
+        },
+      };
+      
+      const promptText = `Analyze this PDF document, extract all relevant biographical facts, experiences, skills, education, projects, certifications, and FAQs of Tauheed Ahmed Nabil. Segment them into high-quality, logical, self-contained paragraphs/chunks of information so that a chatbot can retrieve them to answer questions with extreme accuracy. Return the results strictly as a JSON array of objects, where each object has:
+      - 'category': must be one of 'about', 'education', 'skills', 'projects', 'experience', 'faq', 'other'
+      - 'source': a short string like 'CV Experience Section' or 'Document Page 1'
+      - 'content': the actual extracted text content for this block. Keep each chunk readable, clean and informative.
+      
+      Ensure you do not miss any vital details!`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: [pdfPart, promptText],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                category: { type: Type.STRING },
+                source: { type: Type.STRING },
+                content: { type: Type.STRING }
+              },
+              required: ["category", "source", "content"]
+            }
+          }
+        }
+      });
+
+      const responseText = response.text || "[]";
+      parsedChunks = JSON.parse(responseText);
+    } else {
+      // Send the extracted text to Gemini to chunk and categorize
+      const promptText = `The following text is extracted from a uploaded document named "${fileName || 'document'}". 
+      Analyze the text, extract all relevant biographical facts, experiences, skills, education, projects, certifications, and FAQs of Tauheed Ahmed Nabil. Segment them into high-quality, logical, self-contained paragraphs/chunks of information so that a chatbot can retrieve them to answer questions with extreme accuracy. Return the results strictly as a JSON array of objects, where each object has:
+      - 'category': must be one of 'about', 'education', 'skills', 'projects', 'experience', 'faq', 'other'
+      - 'source': a short string like 'Document: ${fileName || 'unnamed'}'
+      - 'content': the actual text content for this block. Keep each chunk readable, clean and informative.
+      
+      Here is the extracted text:
+      --------------------------
+      ${textToChunk}
+      --------------------------`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: promptText,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                category: { type: Type.STRING },
+                source: { type: Type.STRING },
+                content: { type: Type.STRING }
+              },
+              required: ["category", "source", "content"]
+            }
+          }
+        }
+      });
+
+      const responseText = response.text || "[]";
+      parsedChunks = JSON.parse(responseText);
+    }
+
+    // Now insert these parsed chunks into the database!
+    const savedChunks = [];
+    for (const item of parsedChunks) {
+      const chunkData = {
+        category: item.category || "other",
+        source: item.source || fileName || "Uploaded Document",
+        content: item.content || "",
+      };
+      if (chunkData.content.trim()) {
+        const saved = await addChunk(chunkData);
+        savedChunks.push(saved);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Successfully processed ${fileName}. Extracted and saved ${savedChunks.length} knowledge chunks instantly!`,
+      chunks: savedChunks
+    });
+
+  } catch (error: any) {
+    console.error("Error parsing document with Gemini:", error);
+    res.status(500).json({ error: error.message || "Failed to parse document" });
+  }
 });
 
 // Settings API
