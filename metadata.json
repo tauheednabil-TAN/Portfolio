@@ -1,0 +1,6 @@
+{
+  "name": "Meet Tauheed",
+  "description": "An interactive, premium portfolio website for Tauheed Ahmed Nabil focusing on AI Development and Cybersecurity, featuring a glassmorphic RAG conversational chat room, vertical milestone roadmaps, automated sync calendars, and tech blogs.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
