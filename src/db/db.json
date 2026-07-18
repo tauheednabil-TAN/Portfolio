@@ -367,5 +367,65 @@
     "timezone": "Europe/Copenhagen",
     "myEmail": "tauheednabil@gmail.com",
     "inPersonLocation": "Copenhagen, Denmark ☕"
+  },
+  "latex_resume": "\\documentclass[10pt, a4paper, sans]{moderncv}\n\n% ModernCV themes\n\\moderncvstyle{classic} \n\\moderncvcolor{blue} \n\n% Character encoding\n\\usepackage[utf8]{inputenc}\n\n% Adjust the page margins to ensure exactly 1 page\n\\usepackage[scale=0.92, top=1.2cm, bottom=1.2cm, left=1.5cm, right=1.5cm]{geometry}\n\n% Personal data\n\\name{Tauheed Ahmed}{Nabil}\n\\title{CS Student $\\cdot$ Agentic AI Developer $\\cdot$ Python Engineer}\n\\address{Hesselengen 2, 2.mf}{2625 Vallensbæk}{Copenhagen, Denmark}\n\\phone[mobile]{+45~71420406}\n\\email{tauheednabil@gmail.com}\n\\social[linkedin]{tauheed-ahmed-nabil-26a1422b5}\n\\social[github]{tauheednabil-TAN}\n\n\\begin{document}\n\\makecvtitle\n\n\\vspace{-2.5em} % Pull up to save space\n\n\\section{Profile}\nProactive Computer Science student and AI developer specializing in agentic workflows and multi-agent systems. I build artificial intelligence tools from curiosity up, utilizing Python, LLMs, and frameworks like CrewAI to design solutions that route requests and automate complex tasks. Through my QA testing background, I understand lightweight engineering practices, ensuring the tools I prototype can be evaluated, maintained, and handed over effectively. With my studies concluding in February 2027, I am highly motivated to join Multi-Wing to experiment with Microsoft AI platforms and grow into a full-time AI Developer.\n\n\\section{Relevant Skills}\n\\cvitem{Agentic AI}{Multi-Agent Workflows, RAG, Copilot Studio, Fabric, CrewAI, LangChain, Prompt Design}\n\\cvitem{Programming}{Python, C\\#, TypeScript, SQL, Git Version Control, HTML/CSS}\n\\cvitem{Tech/Ops}{Lightweight Engineering Practices, System Testing, API Integration, Tech Communication}\n\n\\section{Agentic AI \\& Multi-Agent Projects}\n\\cventry{Live}{LoanSage -- Multi-Agent Workflow Pipeline}{CrewAI, Python, RAG}{}{}{Designed and implemented an agentic AI pipeline that uses retrieval augmented generation and prompt design to orchestrate complex decisions. Demonstrates strong capability in routing requests, delegating sub-tasks, and maintaining reliability.}\n\\cventry{Live}{OrderBot -- Autonomous Workflow Agent}{Vertex AI, Google Sheets, Python}{}{}{Prototyped an AI agent that integrates structured data from live sources to make automated routing decisions. Built through hands-on experimentation to solve concrete business use cases.}\n\\cventry{Live}{Sentinel -- Security \\& Validation Scanner}{Next.js, TypeScript, AI}{}{}{Developed an automated scanner combining AI and lightweight engineering practices. Features small tests, version control, and structured outputs to ensure the solution can be reliably maintained and iterated upon.}\n\n\\section{Experience}\n\\cventry{Nov 2025--Present}{QA Tester}{uTest}{Copenhagen}{}{Conduct systematic testing and evaluation of software platforms. Identify edge cases, assess user flows, and iterate based on feedback. This rigorous testing translates perfectly into evaluating agent results and ensuring tool reliability.}\n\\cventry{May 2025--Present}{Technical Assistant}{Scandic Hotels}{Copenhagen}{}{Maintain IT systems and solve daily technical issues. Frequently advise and translate technical problems for domain experts and colleagues who do not have a technical background.}\n\\cventry{Jun--Dec 2025}{Student IT Assistant}{Spacegaming eSports}{Frederiksberg}{}{Maintained technical systems and utilized structured data for tracking. Disseminated knowledge and provided direct support across various departments.}\n\n\\section{Education}\n\\cventry{2024--2027}{BSc Computer Science}{Niels Brock Copenhagen Business College}{Copenhagen}{}{Expected Feb 2027. Coursework includes Data Structures, Machine Learning, and Web Application Development.}\n\n\\end{document}",
+  "parsed_cv": {
+    "name": "Tauheed Ahmed Nabil",
+    "title": "CS Student · Agentic AI Developer · Python Engineer",
+    "location": "Copenhagen, Denmark",
+    "email": "tauheednabil@gmail.com",
+    "github": "tauheednabil-TAN",
+    "linkedin": "tauheed-ahmed-nabil-26a1422b5",
+    "summary": "Proactive Computer Science student and AI developer specializing in agentic workflows and multi-agent systems. I build artificial intelligence tools from curiosity up, utilizing Python, LLMs, and frameworks like CrewAI to design solutions that route requests and automate complex tasks. Through my QA testing background, I understand lightweight engineering practices, ensuring the tools I prototype can be evaluated, maintained, and handed over effectively. With my studies concluding in February 2027, I am highly motivated to join Multi-Wing to experiment with Microsoft AI platforms and grow into a full-time AI Developer.",
+    "skills": {
+      "ai_automation": "Multi-Agent Workflows, RAG, Copilot Studio, Fabric, CrewAI, LangChain, Prompt Design",
+      "programming_languages": "Python, C#, TypeScript, SQL, Git Version Control, HTML/CSS",
+      "security_qa": "Lightweight Engineering Practices, System Testing, API Integration, Tech Communication"
+    },
+    "projects": [
+      {
+        "title": "LoanSage -- Multi-Agent Workflow Pipeline",
+        "status": "Live",
+        "description": "Designed and implemented an agentic AI pipeline that uses retrieval augmented generation and prompt design to orchestrate complex decisions. Demonstrates strong capability in routing requests, delegating sub-tasks, and maintaining reliability."
+      },
+      {
+        "title": "OrderBot -- Autonomous Workflow Agent",
+        "status": "Live",
+        "description": "Prototyped an AI agent that integrates structured data from live sources to make automated routing decisions. Built through hands-on experimentation to solve concrete business use cases."
+      },
+      {
+        "title": "Sentinel -- Security & Validation Scanner",
+        "status": "Live",
+        "description": "Developed an automated scanner combining AI and lightweight engineering practices. Features small tests, version control, and structured outputs to ensure the solution can be reliably maintained and iterated upon."
+      }
+    ],
+    "experience": [
+      {
+        "title": "QA Tester",
+        "company": "uTest",
+        "date": "Nov 2025--Present",
+        "description": "Conduct systematic testing and evaluation of software platforms. Identify edge cases, assess user flows, and iterate based on feedback. This rigorous testing translates perfectly into evaluating agent results and ensuring tool reliability."
+      },
+      {
+        "title": "Technical Assistant",
+        "company": "Scandic Hotels",
+        "date": "May 2025--Present",
+        "description": "Maintain IT systems and solve daily technical issues. Frequently advise and translate technical problems for domain experts and colleagues who do not have a technical background."
+      },
+      {
+        "title": "Student IT Assistant",
+        "company": "Spacegaming eSports",
+        "date": "Jun--Dec 2025",
+        "description": "Maintained technical systems and utilized structured data for tracking. Disseminated knowledge and provided direct support across various departments."
+      }
+    ],
+    "education": [
+      {
+        "degree": "BSc Computer Science",
+        "school": "Niels Brock Copenhagen Business College",
+        "date": "2024--2027"
+      }
+    ],
+    "achievements": []
   }
 }
