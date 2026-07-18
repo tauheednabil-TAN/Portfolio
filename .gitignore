@@ -1,8 +1,80 @@
+# Dependency directories
 node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
+jspm_packages/
+web_modules/
+
+# Local env files (MUST NEVER BE COMMITTED)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.sample
+.env.example.local
 .env*
 !.env.example
+
+# Credentials, secrets, and keys
+*.pem
+*.key
+*.pub
+*.cert
+*.p12
+*.pfx
+credentials.json
+client_secret*.json
+service-account*.json
+firebase-applet-config.json
+firebase_applet_config.xml
+firestore.rules
+firestore.indexes.json
+
+# Build outputs and distribution
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+
+# Testing and coverage
+coverage/
+.nyc_output/
+htmlcov/
+
+# Logs and databases
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-debug.log*
+*.sqlite
+*.db
+
+# Operating System files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE and Editor configurations
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.project
+.classpath
+.settings/
+
