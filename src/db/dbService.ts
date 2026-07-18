@@ -295,9 +295,13 @@ export async function getDB(): Promise<DBStore> {
 }
 
 export async function saveDB(store: DBStore): Promise<void> {
-  await ensureDBDir();
   dbCache = store;
-  await fs.promises.writeFile(DB_PATH, JSON.stringify(store, null, 2), "utf-8");
+  try {
+    await ensureDBDir();
+    await fs.promises.writeFile(DB_PATH, JSON.stringify(store, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("⚠️ Database write failed (expected on read-only environments like Vercel). Running in-memory instead.", err);
+  }
 }
 
 // Knowledge Base Operations

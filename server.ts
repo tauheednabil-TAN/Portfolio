@@ -42,8 +42,12 @@ app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Ensure uploads directory exists on startup
 const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
+try {
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn("⚠️ Failed to create uploads directory on startup (expected on read-only environments like Vercel).", err);
 }
 
 // Serve uploaded media statically
@@ -1492,6 +1496,6 @@ async function startServer() {
   });
 }
 
-if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST && !process.env.VERCEL) {
   startServer();
 }
