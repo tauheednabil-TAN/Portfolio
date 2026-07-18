@@ -33,7 +33,7 @@ import {
 } from "./src/db/dbService.js";
 import { SceneState } from "./src/types.js";
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 
 // Support up to 50MB uploads for photos and video files
@@ -1492,4 +1492,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (process.env.NODE_ENV !== "test" && !process.env.VITEST) {
+  startServer();
+}
