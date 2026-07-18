@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { SceneState } from "./types.js";
 import CafeScene from "./components/CafeScene.tsx";
 import ChatPanel from "./components/ChatPanel.tsx";
@@ -8,6 +8,7 @@ import BookingPanel from "./components/BookingPanel.tsx";
 import SimpleView from "./components/SimpleView.tsx";
 import AdminPortal from "./components/AdminPortal.tsx";
 import BackgroundControlPanel from "./components/BackgroundControlPanel.tsx";
+import { permanentAvatar } from "./components/avatar_data.ts";
 import { 
   Coffee, 
   GraduationCap, 
@@ -46,6 +47,74 @@ export default function App() {
   const [speechBubbleText, setSpeechBubbleText] = useState<string>("Welcome to my virtual café! ☕ Drop an anchor, pull up a stool, and let's chat about my projects, skills, or book a quick calendar sync! (⌐■_■)");
   const [copenhagenTime, setCopenhagenTime] = useState("");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Profile avatar URL state persistent in localStorage (and backed by permanent server-side codebase storage)
+  const [avatarUrl, setAvatarUrl] = useState<string>(() => {
+    return permanentAvatar || localStorage.getItem("custom_avatar_url") || "";
+  });
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [isAdminUser, setIsAdminUser] = useState(false);
+
+  useEffect(() => {
+    const checkToken = () => {
+      setIsAdminUser(!!sessionStorage.getItem("nabil_admin_token"));
+    };
+    checkToken();
+    window.addEventListener("storage", checkToken);
+    return () => window.removeEventListener("storage", checkToken);
+  }, [activePage]);
+
+  // Sync local cached avatar image to server code-base for permanent storage on first render
+  useEffect(() => {
+    const localCached = localStorage.getItem("custom_avatar_url");
+    if (localCached && !permanentAvatar) {
+      fetch("/api/save-permanent-avatar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: localCached })
+      })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success) {
+          console.log("✅ Successfully synchronized local avatar to server codebase permanently.");
+        }
+      })
+      .catch((err) => console.error("Failed to sync avatar:", err));
+    }
+  }, []);
+
+  const handleAvatarClick = () => {
+    if (isAdminUser) {
+      avatarInputRef.current?.click();
+    }
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        localStorage.setItem("custom_avatar_url", base64);
+        setAvatarUrl(base64);
+
+        // Also upload to server to make it permanent in codebase
+        fetch("/api/save-permanent-avatar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: base64 })
+        })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success) {
+            console.log("✅ Avatar successfully persisted permanently to the server codebase.");
+          }
+        })
+        .catch((err) => console.error("Error saving permanent avatar:", err));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Copenhagen Clock ticking (CEST is UTC+2 / CET is UTC+1)
   useEffect(() => {
@@ -381,15 +450,66 @@ export default function App() {
               {/* Elegant welcoming Hero block with Tauheed's profile summary (Full-width) */}
               <div className="w-full bg-white/[0.03] backdrop-blur-2xl border border-white/15 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row gap-6 items-center shadow-[0_12px_40px_rgba(0,0,0,0.35)] relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
-                <div className="w-20 h-20 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center flex-shrink-0 relative shadow-inner overflow-hidden">
-                  <img 
-                    id="tauheed-avatar-img"
-                    src="/uploads/e84526b4-632e-4617-a895-8b0df2cb0b31.png?v=100" 
-                    alt="Tauheed Ahmed Nabil" 
-                    className="w-full h-full object-cover rounded-full cursor-pointer hover:scale-110 transition-transform duration-300 ease-out" 
-                    referrerPolicy="no-referrer" 
+                <div 
+                  className={`w-20 h-20 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center flex-shrink-0 relative shadow-inner overflow-hidden ${
+                    isAdminUser 
+                      ? "cursor-pointer hover:scale-105 active:scale-95 transition-all group" 
+                      : ""
+                  }`}
+                  onClick={isAdminUser ? handleAvatarClick : undefined}
+                  title={isAdminUser ? "Click to upload your custom avatar photo 📸" : "Tauheed Ahmed Nabil"}
+                >
+                  <input
+                    type="file"
+                    ref={avatarInputRef}
+                    onChange={handleAvatarChange}
+                    accept="image/*"
+                    className="hidden"
                   />
-                  <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
+                  {avatarUrl ? (
+                    <img 
+                      id="tauheed-avatar-img"
+                      src={avatarUrl} 
+                      alt="Tauheed Ahmed Nabil" 
+                      className="w-full h-full object-cover rounded-full" 
+                      referrerPolicy="no-referrer" 
+                    />
+                  ) : (
+                    <svg 
+                      id="tauheed-avatar-img"
+                      viewBox="0 0 100 100" 
+                      className="w-full h-full object-cover rounded-full transition-transform duration-300 ease-out bg-gradient-to-br from-amber-950 via-zinc-900 to-amber-900/40"
+                    >
+                      {/* Skin */}
+                      <circle cx="50" cy="52" r="22" fill="#fed7aa" stroke="#1e293b" strokeWidth="1.5" />
+                      {/* Cheeks Blush */}
+                      <circle cx="38" cy="56" r="3" fill="#f87171" opacity="0.3" />
+                      <circle cx="62" cy="56" r="3" fill="#f87171" opacity="0.3" />
+                      {/* Eyes */}
+                      <circle cx="41" cy="48" r="2" fill="#1e293b" />
+                      <circle cx="59" cy="48" r="2" fill="#1e293b" />
+                      {/* Glasses */}
+                      <rect x="33" y="42" width="16" height="12" rx="3" fill="none" stroke="#09090b" strokeWidth="2" />
+                      <rect x="51" y="42" width="16" height="12" rx="3" fill="none" stroke="#09090b" strokeWidth="2" />
+                      <line x1="49" y1="46" x2="51" y2="46" stroke="#09090b" strokeWidth="2" />
+                      {/* Smile */}
+                      <path d="M 45 58 Q 50 63 55 58" fill="none" stroke="#09090b" strokeWidth="2" strokeLinecap="round" />
+                      {/* Curly Hair */}
+                      <path d="M 32 38 C 26 30 32 16 50 16 C 68 16 74 30 68 38 C 65 40 60 38 50 38 C 40 38 35 40 32 38 Z" fill="#09090b" />
+                      <circle cx="34" cy="28" r="6" fill="#09090b" />
+                      <circle cx="42" cy="22" r="7" fill="#09090b" />
+                      <circle cx="50" cy="20" r="7" fill="#09090b" />
+                      <circle cx="58" cy="22" r="7" fill="#09090b" />
+                      <circle cx="66" cy="28" r="6" fill="#09090b" />
+                    </svg>
+                  )}
+                  {/* Camera overlay indicator on hover */}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-amber-400" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M4 5a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-1.586l-1.293-1.293A1 1 0 0012.414 3H7.586a1 1 0 00-.707.293L5.586 5H4zm6 9a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5 z-10">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
                   </span>

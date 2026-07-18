@@ -690,6 +690,27 @@ ${contextText}
   }
 });
 
+// Endpoint to save a permanent avatar image directly into the codebase
+app.post("/api/save-permanent-avatar", async (req, res) => {
+  const { image } = req.body;
+  if (!image || typeof image !== "string") {
+    return res.status(400).json({ error: "Missing image data" });
+  }
+
+  try {
+    const avatarDataPath = path.join(process.cwd(), "src", "components", "avatar_data.ts");
+    const content = `// This file is generated automatically to store Nabil's permanent avatar.
+export const permanentAvatar = ${JSON.stringify(image)};
+`;
+    await fs.promises.writeFile(avatarDataPath, content, "utf8");
+    console.log("✅ Permanent avatar saved to codebase!");
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error("Failed to save permanent avatar:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Blog Posts API (Public and Admin)
 app.get("/api/posts", async (req, res) => {
   const includeDrafts = isAdmin(req);
