@@ -35,6 +35,17 @@ import { SceneState } from "./src/types.js";
 export const app = express();
 const PORT = 3000;
 
+// Route normalizer for serverless deployments (like Vercel) where route prefixes might be modified/stripped
+app.use((req, res, next) => {
+  const url = req.url;
+  if (!url.startsWith("/api") && !url.startsWith("/uploads")) {
+    const originalUrl = req.url;
+    req.url = "/api" + (originalUrl.startsWith("/") ? "" : "/") + originalUrl;
+    console.log(`[Vercel Route Normalizer] Rewrote ${originalUrl} -> ${req.url}`);
+  }
+  next();
+});
+
 // Support up to 50MB uploads for photos and video files
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));

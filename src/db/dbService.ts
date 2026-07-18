@@ -255,9 +255,13 @@ const SEED_POSTS: BlogPost[] = [
 ];
 
 async function ensureDBDir() {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    await fs.promises.mkdir(dir, { recursive: true });
+  try {
+    const dir = path.dirname(DB_PATH);
+    if (!fs.existsSync(dir)) {
+      await fs.promises.mkdir(dir, { recursive: true });
+    }
+  } catch (err) {
+    console.warn("⚠️ Failed to ensure database directory exists (expected on read-only environments like Vercel):", err);
   }
 }
 
