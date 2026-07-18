@@ -85,13 +85,13 @@ describe("Server HTTP API Integration Tests", () => {
     expect(data[0].title).toBeDefined();
   });
 
-  it("should return 400 when permanent avatar is uploaded without image data", async () => {
+  it("should return 401 when permanent avatar is uploaded without admin auth", async () => {
     const res = await fetch(`${baseUrl}/api/save-permanent-avatar`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
     });
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
     const data = await res.json() as any;
     expect(data.error).toBeDefined();
   });

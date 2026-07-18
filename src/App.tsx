@@ -50,7 +50,7 @@ export default function App() {
 
   // Profile avatar URL state persistent in localStorage (and backed by permanent server-side codebase storage)
   const [avatarUrl, setAvatarUrl] = useState<string>(() => {
-    return permanentAvatar || localStorage.getItem("custom_avatar_url") || "";
+    return localStorage.getItem("custom_avatar_url") || permanentAvatar || "";
   });
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [isAdminUser, setIsAdminUser] = useState(false);
@@ -67,7 +67,7 @@ export default function App() {
   // Sync local cached avatar image to server code-base for permanent storage on first render
   useEffect(() => {
     const localCached = localStorage.getItem("custom_avatar_url");
-    if (localCached && !permanentAvatar) {
+    if (localCached && localCached !== permanentAvatar) {
       fetch("/api/save-permanent-avatar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

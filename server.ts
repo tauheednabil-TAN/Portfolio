@@ -797,7 +797,7 @@ ${contextText}
 });
 
 // Endpoint to save a permanent avatar image directly into the codebase
-app.post("/api/save-permanent-avatar", async (req, res) => {
+app.post("/api/save-permanent-avatar", adminRequired, async (req, res) => {
   const { image } = req.body;
   if (!image || typeof image !== "string") {
     return res.status(400).json({ error: "Missing image data" });
