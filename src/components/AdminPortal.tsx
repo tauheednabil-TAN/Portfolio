@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from "react";
-import { BlogPost, RoadmapNode, Booking, KnowledgeChunk, Settings } from "../types.js";
-import { Lock, Eye, EyeOff, Save, Trash2, Calendar, BookOpen, Layers, Database, Settings as SettingsIcon, LogOut, Plus, Check, X, Shield, Upload } from "lucide-react";
+import { BlogPost, RoadmapNode, Booking, KnowledgeChunk, Settings, ParsedCV } from "../types.js";
+import { Lock, Eye, EyeOff, Save, Trash2, Calendar, BookOpen, Layers, Database, Settings as SettingsIcon, LogOut, Plus, Check, X, Shield, Upload, Pencil, FileText, Loader } from "lucide-react";
 
 export default function AdminPortal() {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem("nabil_admin_token"));
+  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem("nabil_admin_token"));
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
-  const [activeTab, setActiveTab] = useState<"bookings" | "posts" | "roadmap" | "knowledge" | "settings">("bookings");
+  const [activeTab, setActiveTab] = useState<"bookings" | "posts" | "roadmap" | "knowledge" | "settings" | "resume">("bookings");
+
+  // LaTeX Resume States
+  const [latexResume, setLatexResume] = useState("");
+  const [parsedCV, setParsedCV] = useState<ParsedCV | null>(null);
+  const [isParsingResume, setIsParsingResume] = useState(false);
 
   // Data States
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -17,12 +22,16 @@ export default function AdminPortal() {
   const [settings, setSettings] = useState<Settings | null>(null);
 
   // Form States
-  const [postForm, setPostForm] = useState({ id: "", title: "", body_md: "", tags: "", published: true });
+  const [postForm, setPostForm] = useState({ id: "", title: "", body_md: "", tags: "", published: true, image_url: "", video_url: "" });
   const [nodeForm, setNodeForm] = useState({ id: "", parent_id: "", title: "", description: "", status: "done" as any, sort_order: 1, icon: "GraduationCap", date_label: "" });
-  const [chunkForm, setChunkForm] = useState({ content: "", source: "", category: "about" as any });
+  const [chunkForm, setChunkForm] = useState({ id: "", content: "", source: "", category: "about" as any });
 
   const [loading, setLoading] = useState(false);
   const [actionStatus, setActionStatus] = useState("");
+
+  // Media Upload States for LinkedIn-style posts
+  const [isMediaUploading, setIsMediaUploading] = useState(false);
+  const [mediaUploadError, setMediaUploadError] = useState("");
 
   // Intelligent Document RAG Upload States
   const [isUploading, setIsUploading] = useState(false);
@@ -53,12 +62,12 @@ export default function AdminPortal() {
   const handleFileChange = async (file: File) => {
     if (!file) return;
 
-    const validExtensions = [".pdf", ".docx", ".txt"];
+    const validExtensions = [".pdf", ".docx", ".txt", ".md"];
     const fileNameLower = file.name.toLowerCase();
     const isValidExt = validExtensions.some(ext => fileNameLower.endsWith(ext));
 
     if (!isValidExt) {
-      setUploadError("Invalid file type. Please upload a PDF, DOCX, or TXT file.");
+      setUploadError("Invalid file type. Please upload a PDF, DOCX, TXT, or MD file.");
       setUploadSuccess("");
       return;
     }
@@ -130,6 +139,55 @@ export default function AdminPortal() {
     reader.readAsDataURL(file);
   };
 
+  const handleMediaUpload = async (file: File) => {
+    if (!file) return;
+    setIsMediaUploading(true);
+    setMediaUploadError("");
+    setActionStatus(`Uploading ${file.name}...`);
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const base64WithMime = e.target?.result as string;
+        if (!base64WithMime) {
+          throw new Error("Failed to read media file.");
+        }
+        const base64Data = base64WithMime.split(",")[1];
+        const res = await fetch("/api/admin/upload-media", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            base64Data,
+            mimeType: file.type,
+            fileName: file.name
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.url) {
+          setActionStatus("Media file uploaded successfully! 📁");
+          if (file.type.startsWith("video/")) {
+            setPostForm(prev => ({ ...prev, video_url: data.url, image_url: "" }));
+          } else {
+            setPostForm(prev => ({ ...prev, image_url: data.url, video_url: "" }));
+          }
+        } else {
+          setMediaUploadError(data.error || "Failed to upload media file.");
+          setActionStatus("Upload failed.");
+        }
+      } catch (err: any) {
+        setMediaUploadError(err.message || "Error uploading file.");
+        setActionStatus("Upload failed.");
+      } finally {
+        setIsMediaUploading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
   useEffect(() => {
     if (token) {
       loadAdminData();
@@ -160,6 +218,14 @@ export default function AdminPortal() {
       // Fetch settings
       const sRes = await fetch("/api/settings");
       if (sRes.ok) setSettings(await sRes.json());
+
+      // Fetch LaTeX Resume and Parsed CV
+      const lRes = await fetch("/api/admin/latex", { headers });
+      if (lRes.ok) {
+        const lData = await lRes.json();
+        setLatexResume(lData.latex_resume || "");
+        setParsedCV(lData.parsed_cv || null);
+      }
     } catch (err) {
       console.error(err);
       handleLogout();
@@ -180,7 +246,7 @@ export default function AdminPortal() {
 
       if (res.ok) {
         const data = await res.json();
-        localStorage.setItem("nabil_admin_token", data.token);
+        sessionStorage.setItem("nabil_admin_token", data.token);
         setToken(data.token);
         setPassword("");
       } else {
@@ -199,7 +265,7 @@ export default function AdminPortal() {
         headers: { Authorization: `Bearer ${token}` },
       });
     }
-    localStorage.removeItem("nabil_admin_token");
+    sessionStorage.removeItem("nabil_admin_token");
     setToken(null);
   };
 
@@ -247,7 +313,7 @@ export default function AdminPortal() {
 
       if (res.ok) {
         setActionStatus("Post saved successfully! 📝");
-        setPostForm({ id: "", title: "", body_md: "", tags: "", published: true });
+        setPostForm({ id: "", title: "", body_md: "", tags: "", published: true, image_url: "", video_url: "" });
         loadAdminData();
       }
     } catch (err) {
@@ -314,7 +380,7 @@ export default function AdminPortal() {
   // Knowledge RAG Actions
   const handleAddChunk = async (e: React.FormEvent) => {
     e.preventDefault();
-    setActionStatus("Adding context...");
+    setActionStatus(chunkForm.id ? "Updating context..." : "Adding context...");
     try {
       const res = await fetch("/api/knowledge", {
         method: "POST",
@@ -326,12 +392,12 @@ export default function AdminPortal() {
       });
 
       if (res.ok) {
-        setActionStatus("Knowledge chunk added! 📚");
-        setChunkForm({ content: "", source: "", category: "about" });
+        setActionStatus(chunkForm.id ? "Knowledge chunk updated! 📚" : "Knowledge chunk added! 📚");
+        setChunkForm({ id: "", content: "", source: "", category: "about" });
         loadAdminData();
       }
     } catch (err) {
-      setActionStatus("Failed to add chunk");
+      setActionStatus("Failed to save chunk");
     }
   };
 
@@ -447,6 +513,7 @@ export default function AdminPortal() {
           { key: "posts", label: "📝 Blog Posts", icon: BookOpen },
           { key: "roadmap", label: "🛤️ Roadmap", icon: Layers },
           { key: "knowledge", label: "📚 RAG Brain", icon: Database },
+          { key: "resume", label: "📄 Latest Resume", icon: FileText },
           { key: "settings", label: "⚙️ Settings", icon: SettingsIcon },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -558,11 +625,11 @@ export default function AdminPortal() {
                 {/* Form column */}
                 <form onSubmit={handleSavePost} className="lg:col-span-1 space-y-4 bg-cafe-50/50 border border-cafe-200 p-4 rounded-xl">
                   <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase border-b border-cafe-200 pb-1.5">
-                    {postForm.id ? "Edit Notebook" : "Write New Notebook"}
+                    {postForm.id ? "Edit LinkedIn-Style Post" : "Write LinkedIn-Style Post"}
                   </h3>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Title</label>
+                    <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Title / Heading</label>
                     <input
                       type="text"
                       required
@@ -596,6 +663,68 @@ export default function AdminPortal() {
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Media Attachment (Photo or Video)</label>
+                    
+                    {/* Upload Drag/Drop & Select Area */}
+                    <div className="border border-dashed border-cafe-300 rounded-lg p-3 bg-white/50 text-center relative hover:bg-cafe-100/40 transition-colors">
+                      <input
+                        type="file"
+                        accept="image/*,video/*"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files[0]) {
+                            handleMediaUpload(e.target.files[0]);
+                          }
+                        }}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        disabled={isMediaUploading}
+                      />
+                      <div className="flex flex-col items-center justify-center space-y-1">
+                        <Upload className="w-4 h-4 text-cafe-500" />
+                        <p className="text-[10px] text-cafe-600 font-medium">
+                          {isMediaUploading ? "Uploading file..." : "Click to attach photo or video"}
+                        </p>
+                        <p className="text-[9px] text-zinc-400">Supports PNG, JPG, MP4, WebM (max 50MB)</p>
+                      </div>
+                    </div>
+
+                    {mediaUploadError && (
+                      <p className="text-[10px] text-red-500 mt-1 font-mono">{mediaUploadError}</p>
+                    )}
+
+                    {/* Previews and file controls */}
+                    {(postForm.image_url || postForm.video_url) && (
+                      <div className="mt-2.5 border border-cafe-200 rounded-lg p-2 bg-white flex flex-col space-y-1.5 relative">
+                        <span className="text-[9px] font-mono font-bold text-cafe-700 uppercase">Attached Media Preview:</span>
+                        
+                        {postForm.image_url && (
+                          <img
+                            src={postForm.image_url}
+                            alt="Upload preview"
+                            className="max-h-24 w-full object-cover rounded border border-zinc-100"
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+
+                        {postForm.video_url && (
+                          <video
+                            src={postForm.video_url}
+                            controls
+                            className="max-h-24 w-full rounded border border-zinc-100"
+                          />
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => setPostForm(prev => ({ ...prev, image_url: "", video_url: "" }))}
+                          className="text-[9px] font-bold text-red-600 hover:underline flex items-center justify-center gap-0.5 mt-1 cursor-pointer self-end"
+                        >
+                          <Trash2 className="w-3 h-3" /> Remove Attachment
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-2 py-1">
                     <input
                       type="checkbox"
@@ -615,7 +744,7 @@ export default function AdminPortal() {
                   {postForm.id && (
                     <button
                       type="button"
-                      onClick={() => setPostForm({ id: "", title: "", body_md: "", tags: "", published: true })}
+                      onClick={() => setPostForm({ id: "", title: "", body_md: "", tags: "", published: true, image_url: "", video_url: "" })}
                       className="w-full py-1 text-[11px] text-cafe-500 font-bold hover:underline"
                     >
                       Cancel Editing
@@ -625,13 +754,13 @@ export default function AdminPortal() {
 
                 {/* List column */}
                 <div className="lg:col-span-2 space-y-4">
-                  <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase">Existing Thoughts ({posts.length})</h3>
+                  <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase">Existing Posts ({posts.length})</h3>
                   <div className="space-y-3">
                     {posts.map((post) => (
                       <div key={post.id} className="border border-cafe-200 bg-white p-4 rounded-xl flex items-center justify-between gap-4">
-                        <div>
-                          <h4 className="text-sm font-bold text-cafe-950 font-display">{post.title}</h4>
-                          <div className="flex gap-1 flex-wrap mt-1">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-bold text-cafe-950 font-display truncate">{post.title}</h4>
+                          <div className="flex gap-1 flex-wrap mt-1 items-center">
                             {post.tags.map((t) => (
                               <span key={t} className="text-[9px] font-mono bg-cafe-100 text-cafe-600 px-1.5 py-0.2 rounded">
                                 #{t}
@@ -640,6 +769,11 @@ export default function AdminPortal() {
                             <span className={`text-[9px] font-mono px-1.5 py-0.2 rounded text-white font-bold ml-2 ${post.published ? "bg-green-500" : "bg-zinc-400"}`}>
                               {post.published ? "Published" : "Draft"}
                             </span>
+                            {(post.image_url || post.video_url) && (
+                              <span className="text-[9px] font-mono bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded font-bold ml-1.5 flex items-center gap-0.5">
+                                📎 {post.video_url ? "Video" : "Photo"}
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -650,7 +784,9 @@ export default function AdminPortal() {
                               title: post.title,
                               body_md: post.body_md,
                               tags: post.tags.join(", "),
-                              published: post.published
+                              published: post.published,
+                              image_url: post.image_url || "",
+                              video_url: post.video_url || ""
                             })}
                             className="p-1 bg-zinc-100 border border-zinc-200 text-zinc-600 hover:bg-zinc-200 hover:text-zinc-800 rounded cursor-pointer"
                             title="Edit"
@@ -887,7 +1023,7 @@ export default function AdminPortal() {
                     </div>
                     
                     <p className="text-[11px] text-cafe-700 leading-normal font-sans">
-                      Upload a detailed <strong>PDF</strong>, <strong>Word file (.docx)</strong>, or <strong>Text file (.txt)</strong> containing resume data, project sheets, or customized instructions. Gemini will parse, format, and save the data as searchable context instantly.
+                      Upload a detailed <strong>PDF</strong>, <strong>Word file (.docx)</strong>, <strong>Text file (.txt)</strong>, or <strong>Markdown file (.md)</strong> containing resume data, project sheets, or customized instructions. Gemini will parse, format, and save the data as searchable context instantly.
                     </p>
 
                     <div
@@ -905,7 +1041,7 @@ export default function AdminPortal() {
                         type="file"
                         id="rag-file-input"
                         className="hidden"
-                        accept=".pdf,.docx,.txt"
+                        accept=".pdf,.docx,.txt,.md"
                         onChange={(e) => {
                           if (e.target.files && e.target.files[0]) {
                             handleFileChange(e.target.files[0]);
@@ -915,13 +1051,30 @@ export default function AdminPortal() {
                       />
                       
                       <label htmlFor="rag-file-input" className="cursor-pointer flex flex-col items-center w-full">
-                        <Upload className={`w-8 h-8 mb-2 ${isUploading ? "text-amber-500 animate-bounce" : "text-cafe-600"}`} />
-                        <span className="text-xs font-bold text-cafe-900 font-sans">
-                          {isUploading ? "Processing Document..." : "Drag & Drop file here"}
-                        </span>
-                        <span className="text-[10px] text-cafe-600 mt-1 font-mono">
-                          Supports PDF, DOCX, or TXT
-                        </span>
+                        {uploadSuccess ? (
+                          <div className="flex flex-col items-center animate-comic-pop text-emerald-600 bg-emerald-500/10 p-4 rounded-xl border border-emerald-500/30 w-full">
+                            <Check className="w-10 h-10 mb-2 stroke-[3] text-emerald-600 bg-white rounded-full p-1.5 shadow-sm" />
+                            <span className="text-xs font-extrabold font-sans">
+                              Upload Completed! 🎉
+                            </span>
+                            <span className="text-[10px] text-emerald-700 mt-1 font-sans font-semibold max-w-xs break-words">
+                              {uploadSuccess}
+                            </span>
+                            <span className="text-[9px] text-emerald-600 mt-2 underline font-sans font-bold">
+                              Click or drop another file to add more
+                            </span>
+                          </div>
+                        ) : (
+                          <>
+                            <Upload className={`w-8 h-8 mb-2 ${isUploading ? "text-amber-500 animate-bounce" : "text-cafe-600"}`} />
+                            <span className="text-xs font-bold text-cafe-900 font-sans">
+                              {isUploading ? "Processing Document..." : "Drag & Drop file here"}
+                            </span>
+                            <span className="text-[10px] text-cafe-600 mt-1 font-mono">
+                              Supports PDF, DOCX, TXT, or MD
+                            </span>
+                          </>
+                        )}
                       </label>
                     </div>
 
@@ -949,7 +1102,16 @@ export default function AdminPortal() {
 
                   {/* Manual entry block */}
                   <form onSubmit={handleAddChunk} className="space-y-4 bg-cafe-50/50 border border-cafe-200 p-4 rounded-xl shadow-sm">
-                    <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase border-b border-cafe-200 pb-1.5">Add Context Block Manually</h3>
+                    <div className="border-b border-cafe-200 pb-1.5 flex items-center justify-between">
+                      <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase">
+                        {chunkForm.id ? "Edit Context Block ✏️" : "Add Context Block Manually"}
+                      </h3>
+                      {chunkForm.id && (
+                        <span className="text-[9px] font-bold font-mono bg-amber-500/15 text-amber-700 px-2 py-0.5 rounded border border-amber-500/25 animate-pulse">
+                          EDITING MODE
+                        </span>
+                      )}
+                    </div>
 
                     <div>
                       <label className="block text-[11px] font-bold text-cafe-700 mb-1 font-mono uppercase">Category</label>
@@ -992,12 +1154,32 @@ export default function AdminPortal() {
                       />
                     </div>
 
-                    <button
-                      type="submit"
-                      className="w-full py-2 bg-cafe-700 text-white font-bold rounded-lg hover:bg-cafe-800 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" /> Add to Brain
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        type="submit"
+                        className="w-full py-2 bg-cafe-700 text-white font-bold rounded-lg hover:bg-cafe-800 text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        {chunkForm.id ? (
+                          <>
+                            <Save className="w-4 h-4" /> Save Changes
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" /> Add to Brain
+                          </>
+                        )}
+                      </button>
+
+                      {chunkForm.id && (
+                        <button
+                          type="button"
+                          onClick={() => setChunkForm({ id: "", content: "", source: "", category: "about" })}
+                          className="w-full py-1.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 font-bold rounded-lg text-[11px] transition-colors cursor-pointer text-center"
+                        >
+                          Cancel Editing
+                        </button>
+                      )}
+                    </div>
                   </form>
                 </div>
 
@@ -1006,7 +1188,7 @@ export default function AdminPortal() {
                   <h3 className="text-xs font-bold font-mono text-cafe-900 uppercase">Chatbot Knowledge Base Chunks ({chunks.length})</h3>
                   <div className="space-y-3 max-h-[500px] overflow-y-auto border border-cafe-100 p-2 rounded-xl bg-white">
                     {chunks.map((chunk) => (
-                      <div key={chunk.id} className="border border-cafe-150 p-3.5 rounded-lg text-xs flex justify-between items-start gap-4 hover:bg-cafe-50/40">
+                      <div key={chunk.id} className={`border p-3.5 rounded-lg text-xs flex justify-between items-start gap-4 hover:bg-cafe-50/40 transition-all ${chunkForm.id === chunk.id ? "border-amber-400 bg-amber-500/[0.04]" : "border-cafe-150"}`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <span className="text-[10px] font-mono bg-cafe-700 text-white px-2 py-0.2 rounded font-bold uppercase">{chunk.category}</span>
@@ -1014,12 +1196,22 @@ export default function AdminPortal() {
                           </div>
                           <p className="text-zinc-700 leading-relaxed mt-1.5">{chunk.content}</p>
                         </div>
-                        <button
-                          onClick={() => handleDeleteChunk(chunk.id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => setChunkForm({ id: chunk.id, content: chunk.content, source: chunk.source, category: chunk.category })}
+                            title="Edit this chunk"
+                            className="p-1 text-cafe-700 hover:bg-cafe-100 rounded cursor-pointer"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteChunk(chunk.id)}
+                            title="Delete this chunk"
+                            className="p-1 text-red-600 hover:bg-red-50 rounded cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1101,6 +1293,177 @@ export default function AdminPortal() {
                   <Save className="w-4 h-4" /> Save Settings
                 </button>
               </form>
+            )}
+
+            {/* RESUME TAB */}
+            {activeTab === "resume" && (
+              <div className="space-y-6 animate-comic-pop">
+                <div className="border-b border-white/10 pb-3">
+                  <h2 className="text-base md:text-lg font-bold font-display text-amber-400">Latest Resume (LaTeX Format)</h2>
+                  <p className="text-xs text-stone-400 mt-1">
+                    Paste or edit your professional LaTeX formatted CV resume code below. Gemini will parse it using structured schema constraints to automatically update the print-ready CV sheet view.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Left Column: LaTeX Editor */}
+                  <div className="space-y-4">
+                    <div className="bg-black/30 border border-white/10 rounded-2xl p-4 space-y-3.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-stone-300 font-mono flex items-center gap-1.5">
+                          <FileText className="w-4 h-4 text-amber-500" /> LaTeX Source Code
+                        </label>
+                        <span className="text-[10px] font-mono text-stone-500">Auto-updates Portfolio CV</span>
+                      </div>
+                      
+                      <textarea
+                        rows={18}
+                        value={latexResume}
+                        onChange={(e) => setLatexResume(e.target.value)}
+                        placeholder="% Paste your professional LaTeX document here..."
+                        className="w-full font-mono text-xs p-4 bg-zinc-950/80 border border-white/10 rounded-xl focus:border-amber-500/50 focus:outline-none text-stone-100 placeholder-stone-600 leading-relaxed resize-y min-h-[350px]"
+                      />
+
+                      <div className="flex items-center justify-between gap-4 pt-1.5 font-mono text-xs">
+                        <button
+                          type="button"
+                          disabled={isParsingResume}
+                          onClick={async () => {
+                            if (!latexResume.trim()) {
+                              setActionStatus("Please enter LaTeX resume code.");
+                              return;
+                            }
+                            setIsParsingResume(true);
+                            setActionStatus("Parsing LaTeX with Gemini...");
+                            try {
+                              const res = await fetch("/api/admin/latex", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  Authorization: `Bearer ${token}`
+                                },
+                                body: JSON.stringify({ latex_resume: latexResume })
+                              });
+
+                              if (res.ok) {
+                                const data = await res.json();
+                                setParsedCV(data.parsed_cv);
+                                setActionStatus("LaTeX resume parsed successfully! 🎉");
+                                loadAdminData();
+                              } else {
+                                const err = await res.json();
+                                setActionStatus(`Failed: ${err.error || "Unknown error"}`);
+                              }
+                            } catch (e) {
+                              setActionStatus("Network error parsing LaTeX resume.");
+                            } finally {
+                              setIsParsingResume(false);
+                            }
+                          }}
+                          className="px-5 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:bg-stone-800 text-stone-950 font-black rounded-xl transition-all cursor-pointer font-display text-xs flex items-center gap-1.5"
+                        >
+                          {isParsingResume ? (
+                            <Loader className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Upload className="w-3.5 h-3.5" />
+                          )}
+                          <span>Parse & Sync LaTeX Resume</span>
+                        </button>
+
+                        {actionStatus && (
+                          <span className="text-[11px] text-amber-500 text-right animate-pulse max-w-[200px] truncate">
+                            {actionStatus}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Live parsed data preview */}
+                  <div className="space-y-4">
+                    <div className="bg-black/30 border border-white/10 rounded-2xl p-5 space-y-4">
+                      <h3 className="text-xs font-bold text-stone-300 font-mono uppercase tracking-wider flex items-center gap-1.5">
+                        <Check className="w-4 h-4 text-emerald-500" /> Extracted Structured Preview
+                      </h3>
+
+                      {parsedCV ? (
+                        <div className="space-y-4.5 max-h-[460px] overflow-y-auto pr-2 scrollbar-thin text-xs text-stone-300">
+                          <div className="border-b border-white/5 pb-3">
+                            <div className="font-bold text-stone-50 text-sm">{parsedCV.name}</div>
+                            <div className="text-amber-500 font-medium text-[11px]">{parsedCV.title}</div>
+                            <div className="text-stone-400 text-[10px] font-mono mt-1 flex flex-wrap gap-2">
+                              <span>📍 {parsedCV.location}</span>
+                              <span>✉️ {parsedCV.email}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="font-bold text-stone-200 uppercase font-mono text-[9px] tracking-wider text-amber-500/85">Professional Summary</div>
+                            <p className="text-stone-300 text-[11px] leading-relaxed">{parsedCV.summary}</p>
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="font-bold text-stone-200 uppercase font-mono text-[9px] tracking-wider text-amber-500/85">Technical Skills</div>
+                            <div className="space-y-1.5 pl-2 text-[11px] text-stone-300">
+                              <div><strong className="text-stone-400 font-mono">AI & Automation:</strong> {parsedCV.skills.ai_automation}</div>
+                              <div><strong className="text-stone-400 font-mono">Programming Languages:</strong> {parsedCV.skills.programming_languages}</div>
+                              <div><strong className="text-stone-400 font-mono">Security & QA:</strong> {parsedCV.skills.security_qa}</div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="font-bold text-stone-200 uppercase font-mono text-[9px] tracking-wider text-amber-500/85">Parsed Projects ({parsedCV.projects?.length || 0})</div>
+                            <div className="space-y-2 pl-2">
+                              {parsedCV.projects?.map((proj, i) => (
+                                <div key={i} className="border-l-2 border-amber-500/30 pl-2">
+                                  <div className="font-bold text-stone-200">{proj.title} <span className="text-[9px] font-mono text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded ml-1">{proj.status}</span></div>
+                                  <div className="text-[11px] text-stone-300 mt-0.5 leading-relaxed">{proj.description}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="font-bold text-stone-200 uppercase font-mono text-[9px] tracking-wider text-amber-500/85">Parsed Work History ({parsedCV.experience?.length || 0})</div>
+                            <div className="space-y-2 pl-2">
+                              {parsedCV.experience?.map((exp, i) => (
+                                <div key={i} className="border-l-2 border-blue-500/30 pl-2">
+                                  <div className="font-bold text-stone-200">{exp.title}</div>
+                                  <div className="text-[10px] text-stone-400">{exp.company} | <span className="font-mono text-amber-500">{exp.date}</span></div>
+                                  <div className="text-[11px] text-stone-300 mt-0.5 leading-relaxed">{exp.description}</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="font-bold text-stone-200 uppercase font-mono text-[9px] tracking-wider text-amber-500/85">Education & Achievements</div>
+                            <div className="space-y-2 pl-2">
+                              {parsedCV.education?.map((edu, i) => (
+                                <div key={i} className="text-[11px] text-stone-300">
+                                  <strong>{edu.degree}</strong> - <span className="text-stone-400">{edu.school}</span> ({edu.date})
+                                </div>
+                              ))}
+                              {parsedCV.achievements?.map((ach, i) => (
+                                <div key={i} className="text-[11px] text-stone-300 flex items-start gap-1">
+                                  <span>🏆</span>
+                                  <span>{ach}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-20 text-stone-500 border border-dashed border-white/5 rounded-xl">
+                          <FileText className="w-8 h-8 text-stone-600 mb-2" />
+                          <span className="text-xs">No LaTeX parsed resume found.</span>
+                          <span className="text-[10px] text-stone-600 mt-1">Paste LaTeX on the left and parse to update.</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         )}

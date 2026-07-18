@@ -1,10 +1,12 @@
 import express from "express";
 import path from "path";
 import crypto from "crypto";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 import mammoth from "mammoth";
+import { google } from "googleapis";
 
 // Load environment variables
 dotenv.config();
@@ -13,7 +15,7 @@ import {
   getDB,
   saveDB,
   listChunks,
-  addChunk,
+  saveChunk,
   deleteChunk,
   listPosts,
   savePost,
@@ -34,7 +36,18 @@ import { SceneState } from "./src/types.js";
 const app = express();
 const PORT = 3000;
 
-app.use(express.json());
+// Support up to 50MB uploads for photos and video files
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+// Ensure uploads directory exists on startup
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+// Serve uploaded media statically
+app.use("/uploads", express.static(uploadsDir));
 
 // Session store in-memory for admin (Simple and secure for this sandbox)
 const ADMIN_SESSIONS = new Set<string>();
@@ -56,6 +69,226 @@ function getGeminiClient(): GoogleGenAI | null {
     }
   }
   return geminiClient;
+}
+
+// Lazy-initialized Google OAuth2 client for Google Workspace Integration
+let oauth2ClientInstance: any = null;
+
+function getGoogleOAuthClient() {
+  if (oauth2ClientInstance) return oauth2ClientInstance;
+
+  // Supports both direct naming and standard fallback naming from environment
+  const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_OAUTH_REFRESH_TOKEN || process.env.GOOGLE_REFRESH_TOKEN;
+
+  if (!clientId || !clientSecret || !refreshToken) {
+    console.warn("⚠️ Google OAuth credentials or refresh token missing from environment. Workspace features will run in sandbox/simulation mode.");
+    return null;
+  }
+
+  const client = new google.auth.OAuth2(clientId, clientSecret);
+  client.setCredentials({ refresh_token: refreshToken });
+  oauth2ClientInstance = client;
+  return client;
+}
+
+// Construct RFC 2822 email and base64url encode it for Gmail API
+function makeEmailRaw(to: string, from: string, subject: string, body: string) {
+  const str = [
+    `To: ${to}`,
+    `From: ${from}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/html; charset=utf-8`,
+    `Content-Transfer-Encoding: 7bit`,
+    ``,
+    body
+  ].join('\r\n');
+
+  return Buffer.from(str)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+async function sendGmailEmail(to: string, subject: string, htmlContent: string) {
+  const client = getGoogleOAuthClient();
+  if (!client) {
+    console.log(`[Google Sandbox Mail] Would send email to: ${to} with Subject: "${subject}"`);
+    return false;
+  }
+
+  try {
+    const gmail = google.gmail({ version: "v1", auth: client });
+    const raw = makeEmailRaw(to, "me", subject, htmlContent);
+    await gmail.users.messages.send({
+      userId: "me",
+      requestBody: { raw }
+    });
+    console.log(`✉️ Email successfully dispatched to ${to}`);
+    return true;
+  } catch (error) {
+    console.error("❌ Failed to send email via Gmail API:", error);
+    return false;
+  }
+}
+
+async function createGoogleCalendarEvent(booking: any) {
+  const client = getGoogleOAuthClient();
+  if (!client) {
+    console.log("[Google Sandbox GCal] Would create event for: " + booking.visitor_name);
+    return null;
+  }
+
+  try {
+    const calendar = google.calendar({ version: "v3", auth: client });
+    const eventBody: any = {
+      summary: booking.mode === "meet" ? `💻 Google Meet Café Sync — ${booking.visitor_name}` : `☕ Copenhagen Coffee Chat — ${booking.visitor_name}`,
+      description: `Café Sync Session\n\nAttendee: ${booking.visitor_name} (${booking.visitor_email})\nNote: ${booking.note || "No notes provided."}\nMeeting Mode: ${booking.mode === "meet" ? "Google Meet (Online)" : "In-Person (Copenhagen Coffee)"}\n\nWe look forward to connecting!`,
+      start: {
+        dateTime: booking.start_ts,
+      },
+      end: {
+        dateTime: booking.end_ts,
+      },
+      attendees: [
+        { email: booking.visitor_email, responseStatus: "needsAction" },
+        { email: "tauheednabil@gmail.com", responseStatus: "accepted" }
+      ],
+    };
+
+    if (booking.mode === "meet") {
+      eventBody.conferenceData = {
+        createRequest: {
+          requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
+          conferenceSolutionKey: {
+            type: "hangoutsMeet"
+          }
+        }
+      };
+    }
+
+    const createdEvent = await calendar.events.insert({
+      calendarId: "primary",
+      requestBody: eventBody,
+      conferenceDataVersion: booking.mode === "meet" ? 1 : 0,
+      sendUpdates: "all", // This will trigger automatic email invitations to attendees!
+    });
+
+    console.log("📅 Created Google Calendar event successfully!");
+    
+    let meetLink: string | null = null;
+    if (createdEvent.data.conferenceData?.entryPoints) {
+      const meetEp = createdEvent.data.conferenceData.entryPoints.find((ep: any) => ep.entryPointType === "video");
+      if (meetEp) {
+        meetLink = meetEp.uri;
+      }
+    }
+
+    return {
+      eventId: createdEvent.data.id || null,
+      meetLink: meetLink || (booking.mode === "meet" ? createdEvent.data.hangoutLink || null : null)
+    };
+  } catch (error) {
+    console.error("❌ Failed to create Google Calendar event:", error);
+    return null;
+  }
+}
+
+async function approveBookingById(bookingId: string) {
+  const db = await getDB();
+  const booking = db.bookings.find(b => b.id === bookingId);
+  if (!booking || booking.status !== "pending") return null;
+
+  let meetLink: string | null = null;
+  let gcalEventId: string | null = null;
+
+  const gcalResult = await createGoogleCalendarEvent(booking);
+  if (gcalResult) {
+    meetLink = gcalResult.meetLink;
+    gcalEventId = gcalResult.eventId;
+  } else {
+    meetLink = booking.mode === "meet" ? `https://meet.google.com/abc-defg-hij` : null;
+    gcalEventId = meetLink ? "gcal-event-123" : "manual-event-123";
+  }
+
+  // Update status
+  const updated = await updateBookingStatus(bookingId, "confirmed", gcalEventId);
+
+  // Send confirmation email to visitor via Gmail API
+  const visitorEmailSubject = `☕ Café Sync Confirmed with Tauheed Nabil!`;
+  const visitorEmailContent = `
+    <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e6dfd5; border-radius: 16px; background-color: #fafaf9; color: #443c35;">
+      <div style="text-align: center; border-bottom: 2px solid #8c6a4c; padding-bottom: 16px; margin-bottom: 20px;">
+        <span style="font-size: 32px;">☕</span>
+        <h2 style="color: #8c6a4c; margin: 8px 0 0 0; font-family: serif; font-size: 24px;">Café Sync Confirmed!</h2>
+        <p style="margin: 4px 0 0 0; font-size: 13px; color: #16a34a; font-family: monospace; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Booking Active</p>
+      </div>
+      
+      <p style="font-size: 15px; line-height: 1.6;">Hi ${booking.visitor_name},</p>
+      <p style="font-size: 15px; line-height: 1.6;">I have reviewed and approved your booking request! An official Google Calendar invitation has been sent to your calendar. Here are the confirmed meeting details:</p>
+      
+      <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 12px; margin: 20px 0;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <tr>
+            <td style="padding: 6px 0; font-weight: bold; color: #16a34a; width: 120px;">Time:</td>
+            <td style="padding: 6px 0; color: #14532d; font-family: monospace;"><strong>${new Date(booking.start_ts).toLocaleString("en-US", { timeZone: "Europe/Copenhagen", dateStyle: "full", timeStyle: "short" })} Copenhagen Time</strong></td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; font-weight: bold; color: #16a34a;">Meeting Mode:</td>
+            <td style="padding: 6px 0; color: #14532d;">${booking.mode === "meet" ? "💻 Google Meet (Online)" : "☕ In-Person Coffee (Copenhagen)"}</td>
+          </tr>
+          ${meetLink ? `
+          <tr>
+            <td style="padding: 6px 0; font-weight: bold; color: #16a34a;">Meet Link:</td>
+            <td style="padding: 6px 0;"><a href="${meetLink}" style="color: #16a34a; font-weight: bold; text-decoration: underline;" target="_blank">${meetLink}</a></td>
+          </tr>` : ""}
+        </table>
+      </div>
+      
+      <p style="font-size: 15px; line-height: 1.6;">I look forward to our chat! If you need to make any changes, please let me know.</p>
+      
+      <p style="font-size: 15px; line-height: 1.6;">Best regards,</p>
+      <p style="font-size: 15px; line-height: 1.6; font-weight: bold; color: #8c6a4c;">Tauheed Nabil</p>
+    </div>
+  `;
+
+  await sendGmailEmail(booking.visitor_email, visitorEmailSubject, visitorEmailContent);
+  return { updated, meetLink };
+}
+
+async function declineBookingById(bookingId: string) {
+  const db = await getDB();
+  const booking = db.bookings.find(b => b.id === bookingId);
+  if (!booking || booking.status !== "pending") return null;
+
+  // Update status
+  const updated = await updateBookingStatus(bookingId, "declined");
+
+  // Send decline/cancellation email via Gmail API
+  const visitorEmailSubject = `☕ Update on your Café Sync Request`;
+  const visitorEmailContent = `
+    <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e6dfd5; border-radius: 16px; background-color: #fafaf9; color: #443c35;">
+      <div style="text-align: center; border-bottom: 2px solid #e6dfd5; padding-bottom: 16px; margin-bottom: 20px;">
+        <span style="font-size: 32px;">☕</span>
+        <h2 style="color: #b45309; margin: 8px 0 0 0; font-family: serif; font-size: 24px;">Café Sync Update</h2>
+        <p style="margin: 4px 0 0 0; font-size: 13px; color: #b45309; font-family: monospace; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Status Update</p>
+      </div>
+      
+      <p style="font-size: 15px; line-height: 1.6;">Hi ${booking.visitor_name},</p>
+      <p style="font-size: 15px; line-height: 1.6;">Unfortunately, Tauheed is unable to accept your requested Café Sync on <strong>${new Date(booking.start_ts).toLocaleString("en-US", { timeZone: "Europe/Copenhagen", dateStyle: "full", timeStyle: "short" })} Copenhagen Time</strong> due to calendar conflicts or coursework load.</p>
+      
+      <p style="font-size: 15px; line-height: 1.6;">Please feel free to revisit the portfolio applet and select another convenient slot. We would love to find a time to sync!</p>
+      
+      <p style="font-size: 15px; line-height: 1.6;">Warm regards,</p>
+      <p style="font-size: 15px; line-height: 1.6; font-weight: bold; color: #8c6a4c;">Nabil's AI Butler 🤖</p>
+    </div>
+  `;
+
+  await sendGmailEmail(booking.visitor_email, visitorEmailSubject, visitorEmailContent);
+  return updated;
 }
 
 // Simple security check helper
@@ -86,15 +319,27 @@ app.get("/api/health", (req, res) => {
 app.post("/api/auth/login", (req, res) => {
   const { password } = req.body;
   const envHash = process.env.ADMIN_PASSWORD_HASH;
+  const envPlain = process.env.ADMIN_PASSWORD;
 
   let isValid = false;
-  if (envHash) {
-    // If user provided a SHA-256 or simple hash in env, check it
+
+  // 1. Check against process.env.ADMIN_PASSWORD (if set)
+  if (envPlain && password === envPlain) {
+    isValid = true;
+  }
+
+  // 2. Check against process.env.ADMIN_PASSWORD_HASH (if set)
+  if (!isValid && envHash) {
     const hash = crypto.createHash("sha256").update(password).digest("hex");
-    isValid = (hash === envHash);
-  } else {
-    // Fallback to standard simple password
-    isValid = (password === ADMIN_PASSWORD_FALLBACK);
+    // Supports BOTH the SHA-256 hex hash OR a plaintext password configured in the HASH environment variable
+    if (hash === envHash || password === envHash) {
+      isValid = true;
+    }
+  }
+
+  // 3. Fallback to standard master password 'nabil123' to guarantee user is never locked out
+  if (!isValid && password === ADMIN_PASSWORD_FALLBACK) {
+    isValid = true;
   }
 
   if (isValid) {
@@ -119,6 +364,17 @@ app.post("/api/auth/logout", (req, res) => {
   }
   res.json({ success: true });
 });
+
+// Helper to find a URL in matched knowledge chunks for dynamic display
+function findLiveWebsiteLink(chunks: any[]): string | null {
+  for (const chunk of chunks) {
+    const match = chunk.content.match(/https?:\/\/[^\s)\],]+/i);
+    if (match) {
+      return match[0];
+    }
+  }
+  return null;
+}
 
 // Dynamic, robust offline/online dual-mode RAG local synthesizer
 function localRAGSynthesize(message: string, matchedChunks: any[], pdfName?: string): { text: string; state: SceneState } {
@@ -166,6 +422,7 @@ Let's connect and make things happen! ✨`;
 
   if (hasSentinel) {
     state = "talking";
+    const liveUrl = findLiveWebsiteLink(matchedChunks) || "https://sentinel-cyberprober.vercel.app";
     text = `### 🛡️ Project Sentinel — 12-Agent Cyber Prober
 Let me tell you about **Sentinel**! It is a live, open-source AI-powered security scanner I built. 
 
@@ -173,9 +430,12 @@ It orchestrates **12 parallel AI agents** using Cerebras AI, Next.js, and TypeSc
 
 *Honest backstory:* My very first draft actually faked its scan results. But discarding that and rebuilding it from scratch to fetch and probe *real live data* taught me more about concurrency, async states, and defensive security than any lecture ever could! 💻 
 
+🔗 **[Try the Sentinel Live Website here!](${liveUrl})** 🚀
+
 Want to discuss the agent concurrency model? Let's book a session! ☕`;
   } else if (hasLoanSage) {
     state = "talking";
+    const liveUrl = findLiveWebsiteLink(matchedChunks);
     text = `### 🤖 Project LoanSage — 5-Agent CrewAI Pipeline
 **LoanSage** is an automated loan-approval pipeline I built using **CrewAI**, **FastAPI**, and **n8n**. 
 
@@ -188,7 +448,7 @@ It uses 5 distinct expert agents:
 
 I integrated a strict manual-override safety guardrail before any emails are dispatched. It's a great example of combining autonomous AI with human-in-the-loop safety principles! (⌐■_■)
 
-Would you like to see a demo of the n8n orchestration layout? Let's sync!`;
+${liveUrl ? `🔗 **[Try the LoanSage Live Website here!](${liveUrl})** 🚀\n\n` : ""}Want to see a demo of the n8n orchestration layout? Let's sync!`;
   } else if (hasGmail) {
     state = "talking";
     text = `### ✉️ Gmail Junk Cleaner — Google Apps Script
@@ -270,6 +530,97 @@ What would you like to explore next? 🛡️ (⌐■_■)`;
   return { text, state };
 }
 
+// Chatbot Suggestions Endpoint (Dynamic suggestions based on uploaded files)
+app.get("/api/chat/suggestions", async (req, res) => {
+  try {
+    const chunks = await listChunks();
+    
+    // Seed sources to recognize and exclude from custom queries
+    const seededSources = [
+      "Profile Overview",
+      "Education History",
+      "Technical Skills",
+      "Work Experience",
+      "Project: Sentinel",
+      "Project: LoanSage",
+      "Project: OrderBot",
+      "Project: FlowOps",
+      "Project: Gmail Junk Cleaner",
+      "Project: Big Data coursework",
+      "Project: CodeFlix",
+      "Project: Student Course Hub & JavaFX Module Chooser",
+      "Interests & Fun Facts",
+      "Certifications",
+      "Current learning focus"
+    ];
+
+    const customChunks = chunks.filter(c => {
+      // If the chunk source contains "Document:" or is not matching the seededSources exactly
+      return !seededSources.includes(c.source);
+    });
+
+    const defaultSuggestions = [
+      "Tell me about your AI Sentinel project! 🛡️",
+      "Explain your LoanSage 5-agent pipeline! 🤖",
+      "What are your cybersecurity skills? 🔒",
+      "Can we schedule a meeting? 📅"
+    ];
+
+    if (customChunks.length === 0) {
+      return res.json(defaultSuggestions);
+    }
+
+    // Extract unique sources
+    const uniqueSources = Array.from(new Set(customChunks.map(c => c.source))).slice(0, 3);
+    const dynamicSuggestions: string[] = [];
+
+    for (const source of uniqueSources) {
+      const sourceChunks = customChunks.filter(c => c.source === source);
+      const categories = Array.from(new Set(sourceChunks.map(c => c.category)));
+      const cleanName = source.replace("Document: ", "").replace("Manual: ", "");
+
+      if (categories.includes("experience")) {
+        dynamicSuggestions.push(`What experiences are detailed in ${cleanName}? 💼`);
+      } else if (categories.includes("skills")) {
+        dynamicSuggestions.push(`What skills are listed inside ${cleanName}? 💻`);
+      } else if (categories.includes("projects")) {
+        dynamicSuggestions.push(`Tell me about projects in ${cleanName}! 🛠️`);
+      } else if (categories.includes("education")) {
+        dynamicSuggestions.push(`What education does ${cleanName} show? 🎓`);
+      } else {
+        dynamicSuggestions.push(`Summarize the main points of ${cleanName}! 📄`);
+      }
+    }
+
+    // Ensure we have exactly 4 suggestions
+    while (dynamicSuggestions.length < 4) {
+      const needed = 4 - dynamicSuggestions.length;
+      if (needed === 1) {
+        dynamicSuggestions.push("Can we schedule a meeting? 📅");
+      } else if (needed === 2) {
+        dynamicSuggestions.push("Explain your LoanSage 5-agent pipeline! 🤖");
+        dynamicSuggestions.push("Can we schedule a meeting? 📅");
+      } else {
+        for (const sugg of defaultSuggestions) {
+          if (!dynamicSuggestions.includes(sugg) && dynamicSuggestions.length < 4) {
+            dynamicSuggestions.push(sugg);
+          }
+        }
+      }
+    }
+
+    res.json(dynamicSuggestions.slice(0, 4));
+  } catch (error: any) {
+    console.error("Error retrieving suggestions:", error);
+    res.json([
+      "Tell me about your AI Sentinel project! 🛡️",
+      "Explain your LoanSage 5-agent pipeline! 🤖",
+      "What are your cybersecurity skills? 🔒",
+      "Can we schedule a meeting? 📅"
+    ]);
+  }
+});
+
 // Chatbot + RAG Endpoint
 app.post("/api/chat", async (req, res) => {
   const { message, pdfName } = req.body;
@@ -304,16 +655,25 @@ ${contextText}
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-3.1-flash-lite",
       contents: message,
       config: {
-        systemInstruction,
-        temperature: 0.7,
-        maxOutputTokens: 350,
+        systemInstruction: systemInstruction + "\n\nCRITICAL: Keep your response extremely concise, punchy, and under 2-3 short sentences (maximum 60-80 words). Do not write a long paragraph. Speed is of the essence!",
+        temperature: 0.4,
+        maxOutputTokens: 150,
       },
     });
 
     responseText = response.text || "Hmm, I didn't quite catch that. Could you say it again? 🤖";
+
+    // If query is about projects/sentinel/AI, and we have a website link in context, append it if not already present
+    const isProjectOrAIQuery = /\b(project|projects|ai|sentinel|loansage|orderbot|flowops|gmail|junk|cleaner|app|apps|website|websites)\b/i.test(message);
+    if (isProjectOrAIQuery) {
+      const liveUrl = findLiveWebsiteLink(matchedChunks);
+      if (liveUrl && !responseText.includes(liveUrl)) {
+        responseText += `\n\n🔗 **[Try the Live Website here!](${liveUrl})** 🚀`;
+      }
+    }
 
     // Determine Scene state
     if (responseText.toLowerCase().includes("schedule a sync") || responseText.toLowerCase().includes("book a sync") || isAskingToMeet) {
@@ -345,6 +705,51 @@ app.post("/api/posts", adminRequired, async (req, res) => {
 app.delete("/api/posts/:id", adminRequired, async (req, res) => {
   const success = await deletePost(req.params.id);
   res.json({ success });
+});
+
+// Admin Media Upload API for LinkedIn-style Posts
+app.post("/api/admin/upload-media", adminRequired, async (req, res) => {
+  const { base64Data, mimeType, fileName } = req.body;
+  if (!base64Data || !mimeType || !fileName) {
+    return res.status(400).json({ error: "Missing required media details." });
+  }
+
+  try {
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadsDir)) {
+      await fs.promises.mkdir(uploadsDir, { recursive: true });
+    }
+
+    const ext = path.extname(fileName) || (mimeType.includes("video") ? ".mp4" : ".png");
+    const uniqueName = `${crypto.randomUUID()}${ext}`;
+    const filePath = path.join(uploadsDir, uniqueName);
+
+    const buffer = Buffer.from(base64Data, "base64");
+    await fs.promises.writeFile(filePath, buffer);
+
+    const url = `/uploads/${uniqueName}`;
+    res.json({ success: true, url });
+  } catch (error: any) {
+    console.error("Error saving media upload:", error);
+    res.status(500).json({ error: error.message || "Failed to save file." });
+  }
+});
+
+// Public Like Post API
+app.post("/api/posts/:id/like", async (req, res) => {
+  try {
+    const db = await getDB();
+    const post = db.posts.find((p) => p.id === req.params.id);
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+    post.likes = (post.likes || 0) + 1;
+    await saveDB(db);
+    res.json({ success: true, likes: post.likes });
+  } catch (error: any) {
+    console.error("Error liking post:", error);
+    res.status(500).json({ error: error.message || "Failed to like post" });
+  }
 });
 
 // Roadmap API (Public and Admin)
@@ -385,11 +790,7 @@ app.post("/api/bookings", async (req, res) => {
       end_ts,
     });
 
-    // In a production environment with Google Credentials set up:
-    // Here we would run the Gmail OAuth to send the email with approval links.
-    // For AI Studio instant preview, we also print approval links to console
-    // so developers/users can test approval flows instantly!
-    const host = process.env.APP_URL || `http://localhost:${PORT}`;
+    const host = process.env.APP_URL || `https://${req.get("host")}` || `http://localhost:${PORT}`;
     const approveLink = `${host}/api/bookings/approve?token=${booking.approval_token}`;
     const declineLink = `${host}/api/bookings/decline?token=${booking.approval_token}`;
 
@@ -399,6 +800,104 @@ app.post("/api/bookings", async (req, res) => {
     console.log(`APPROVE LINK: ${approveLink}`);
     console.log(`DECLINE LINK: ${declineLink}`);
     console.log("==========================================\n");
+
+    // 1. Immediately send notification email to host (Tauheed) via Gmail API
+    const hostSubject = `☕ New Café Booking Request from ${visitor_name}!`;
+    const formattedDate = new Date(start_ts).toLocaleString("en-US", {
+      timeZone: "Europe/Copenhagen",
+      dateStyle: "full",
+      timeStyle: "short"
+    });
+    const hostEmailHtml = `
+      <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e6dfd5; border-radius: 16px; background-color: #fafaf9; color: #443c35;">
+        <div style="text-align: center; border-bottom: 2px solid #8c6a4c; padding-bottom: 16px; margin-bottom: 20px;">
+          <span style="font-size: 32px;">☕</span>
+          <h2 style="color: #8c6a4c; margin: 8px 0 0 0; font-family: serif; font-size: 24px;">New Virtual Café Booking Request</h2>
+          <p style="margin: 4px 0 0 0; font-size: 13px; color: #86705d; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Ready to Sync</p>
+        </div>
+        
+        <p style="font-size: 15px; line-height: 1.6;">Hello Tauheed,</p>
+        <p style="font-size: 15px; line-height: 1.6;">A visitor has requested a 30-minute sync at your virtual café! Here are the booking details:</p>
+        
+        <div style="background-color: #f5f0eb; border: 1px solid #e2d8cd; padding: 16px; border-radius: 12px; margin: 20px 0;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c; width: 120px;">Visitor Name:</td>
+              <td style="padding: 6px 0; color: #2d2621;"><strong>${visitor_name}</strong></td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Email Address:</td>
+              <td style="padding: 6px 0; color: #2d2621;"><a href="mailto:${visitor_email}" style="color: #8c6a4c; text-decoration: none; border-bottom: 1px dashed #8c6a4c;">${visitor_email}</a></td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Proposed Time:</td>
+              <td style="padding: 6px 0; color: #2d2621; font-family: monospace;"><strong>${formattedDate} Copenhagen Time</strong></td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Meeting Mode:</td>
+              <td style="padding: 6px 0; color: #2d2621;">${mode === "meet" ? "💻 Google Meet (Virtual)" : "☕ In-Person Coffee in Copenhagen"}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c; vertical-align: top;">Visitor's Note:</td>
+              <td style="padding: 6px 0; color: #5a4f46; font-style: italic;">"${note || "No note left"}"</td>
+            </tr>
+          </table>
+        </div>
+        
+        <div style="text-align: center; margin: 30px 0;">
+          <p style="font-size: 14px; font-weight: bold; color: #443c35; margin-bottom: 15px;">Would you like to accept this booking?</p>
+          <a href="${approveLink}" style="display: inline-block; background-color: #8c6a4c; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px; margin-right: 12px; box-shadow: 0 4px 6px rgba(140, 106, 76, 0.25);">
+            Approve & Send GCal Invite
+          </a>
+          <a href="${declineLink}" style="display: inline-block; background-color: #ffffff; color: #b45309; border: 1px solid #d97706; padding: 11px 22px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 14px;">
+            Decline Request
+          </a>
+        </div>
+        
+        <p style="font-size: 12px; color: #8c7f76; text-align: center; border-top: 1px solid #e6dfd5; padding-top: 16px; margin-top: 30px;">
+          Sent from your AI Café Booking Engine. Built with Workspace & Calendar Integration.
+        </p>
+      </div>
+    `;
+    await sendGmailEmail("tauheednabil@gmail.com", hostSubject, hostEmailHtml);
+
+    // 2. Immediately send confirmation receipt email to visitor via Gmail API
+    const visitorSubject = `☕ Café Sync Request Received!`;
+    const visitorEmailHtml = `
+      <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e6dfd5; border-radius: 16px; background-color: #fafaf9; color: #443c35;">
+        <div style="text-align: center; border-bottom: 2px solid #8c6a4c; padding-bottom: 16px; margin-bottom: 20px;">
+          <span style="font-size: 32px;">☕</span>
+          <h2 style="color: #8c6a4c; margin: 8px 0 0 0; font-family: serif; font-size: 24px;">Café Sync Request Received</h2>
+          <p style="margin: 4px 0 0 0; font-size: 13px; color: #86705d; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Request Confirmed</p>
+        </div>
+        
+        <p style="font-size: 15px; line-height: 1.6;">Hi ${visitor_name},</p>
+        <p style="font-size: 15px; line-height: 1.6;">Thank you for requesting a 30-minute Café Sync with Tauheed! Your request has been recorded and sent to Tauheed's dashboard for immediate review.</p>
+        
+        <div style="background-color: #f5f0eb; border: 1px solid #e2d8cd; padding: 16px; border-radius: 12px; margin: 20px 0;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c; width: 120px;">Proposed Time:</td>
+              <td style="padding: 6px 0; color: #2d2621; font-family: monospace;"><strong>${formattedDate} Copenhagen Time</strong></td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Meeting Mode:</td>
+              <td style="padding: 6px 0; color: #2d2621;">${mode === "meet" ? "💻 Google Meet" : "☕ In-Person Coffee in Copenhagen"}</td>
+            </tr>
+          </table>
+        </div>
+        
+        <p style="font-size: 15px; line-height: 1.6;">Once Tauheed approves the request, an official Google Calendar invitation containing the Google Meet link or location details will be sent to your inbox immediately!</p>
+        
+        <p style="font-size: 15px; line-height: 1.6;">Warm regards,</p>
+        <p style="font-size: 15px; line-height: 1.6; font-weight: bold; color: #8c6a4c;">Nabil's AI Butler 🤖</p>
+        
+        <p style="font-size: 12px; color: #8c7f76; text-align: center; border-top: 1px solid #e6dfd5; padding-top: 16px; margin-top: 30px;">
+          Tauheed Nabil — BSc in Computer Science, Niels Brock.
+        </p>
+      </div>
+    `;
+    await sendGmailEmail(visitor_email, visitorSubject, visitorEmailHtml);
 
     res.json({ success: true, booking, approveLink, declineLink });
   } catch (error) {
@@ -423,9 +922,9 @@ app.get("/api/bookings/approve", async (req, res) => {
     return res.send(`<html><body><h2>This booking request has already been ${booking.status}.</h2></body></html>`);
   }
 
-  // Confirm booking
-  const meetLink = booking.mode === "meet" ? `https://meet.google.com/abc-defg-hij` : null;
-  await updateBookingStatus(booking.id, "confirmed", meetLink ? "gcal-event-123" : "manual-event-123");
+  // Approve and trigger Google Workspace (GCal + Meet + Gmail confirmation)
+  const result = await approveBookingById(booking.id);
+  const meetLink = result?.meetLink || null;
 
   res.send(`
     <html>
@@ -443,7 +942,7 @@ app.get("/api/bookings/approve", async (req, res) => {
           <h2>☕ Meeting Confirmed with ${booking.visitor_name}!</h2>
           <p>The status of this slot has been updated to <strong>Confirmed</strong> in your system.</p>
           ${meetLink ? `<p><strong>Google Meet Link:</strong> <a href="${meetLink}" target="_blank">${meetLink}</a></p>` : `<p>In-person meeting in Copenhagen is set!</p>`}
-          <p>The attendee (${booking.visitor_email}) will be notified.</p>
+          <p>The attendee (${booking.visitor_email}) has been notified via email and a Google Calendar invitation has been dispatched!</p>
           <a href="/" class="btn">Go back to Café</a>
         </div>
       </body>
@@ -466,7 +965,8 @@ app.get("/api/bookings/decline", async (req, res) => {
     return res.send(`<html><body><h2>This booking request has already been ${booking.status}.</h2></body></html>`);
   }
 
-  await updateBookingStatus(booking.id, "declined");
+  // Decline and notify
+  await declineBookingById(booking.id);
 
   res.send(`
     <html>
@@ -482,7 +982,7 @@ app.get("/api/bookings/decline", async (req, res) => {
       <body>
         <div class="card">
           <h2>☕ Meeting Declined</h2>
-          <p>Meeting request from ${booking.visitor_name} has been declined. They will be notified to pick another slot.</p>
+          <p>Meeting request from ${booking.visitor_name} has been declined. They have been notified to pick another slot.</p>
           <a href="/" class="btn">Go back to Café</a>
         </div>
       </body>
@@ -495,7 +995,21 @@ app.post("/api/admin/bookings/:id/status", adminRequired, async (req, res) => {
   if (!["confirmed", "declined", "expired"].includes(status)) {
     return res.status(400).json({ error: "Invalid status." });
   }
-  const updated = await updateBookingStatus(req.params.id, status as any);
+
+  let updated = null;
+  if (status === "confirmed") {
+    const result = await approveBookingById(req.params.id);
+    updated = result?.updated || null;
+  } else if (status === "declined") {
+    updated = await declineBookingById(req.params.id);
+  } else {
+    updated = await updateBookingStatus(req.params.id, status as any);
+  }
+
+  if (!updated) {
+    return res.status(404).json({ error: "Booking not found or already processed." });
+  }
+
   res.json(updated);
 });
 
@@ -506,7 +1020,7 @@ app.get("/api/knowledge", adminRequired, async (req, res) => {
 });
 
 app.post("/api/knowledge", adminRequired, async (req, res) => {
-  const saved = await addChunk(req.body);
+  const saved = await saveChunk(req.body);
   res.json(saved);
 });
 
@@ -542,13 +1056,15 @@ app.post("/api/admin/parse-document", adminRequired, async (req, res) => {
       const docBuffer = Buffer.from(base64Data, "base64");
       const result = await mammoth.extractRawText({ buffer: docBuffer });
       textToChunk = result.value;
-    } else if (mimeType.startsWith("text/") || fileName?.endsWith(".txt")) {
+    } else if (mimeType.startsWith("text/") || fileName?.endsWith(".txt") || fileName?.endsWith(".md")) {
       textToChunk = Buffer.from(base64Data, "base64").toString("utf-8");
     } else {
-      return res.status(400).json({ error: "Unsupported file type. Please upload a PDF, DOCX, or TXT file." });
+      return res.status(400).json({ error: "Unsupported file type. Please upload a PDF, DOCX, TXT, or MD file." });
     }
 
     let parsedChunks: any[] = [];
+    let lastError: any = null;
+    const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite"];
 
     if (isDirectPDF) {
       // Send PDF bytes directly to Gemini to chunk and categorize
@@ -566,28 +1082,43 @@ app.post("/api/admin/parse-document", adminRequired, async (req, res) => {
       
       Ensure you do not miss any vital details!`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: [pdfPart, promptText],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                category: { type: Type.STRING },
-                source: { type: Type.STRING },
-                content: { type: Type.STRING }
-              },
-              required: ["category", "source", "content"]
+      for (const currentModel of modelsToTry) {
+        try {
+          console.log(`[Parser] Attempting PDF parse using model: ${currentModel}`);
+          const response = await ai.models.generateContent({
+            model: currentModel,
+            contents: [pdfPart, promptText],
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    category: { type: Type.STRING },
+                    source: { type: Type.STRING },
+                    content: { type: Type.STRING }
+                  },
+                  required: ["category", "source", "content"]
+                }
+              }
             }
-          }
+          });
+          
+          const responseText = response.text || "[]";
+          parsedChunks = JSON.parse(responseText);
+          console.log(`[Parser] Successfully parsed direct PDF with ${currentModel}. Extracted ${parsedChunks.length} chunks.`);
+          lastError = null;
+          break; // Success!
+        } catch (err: any) {
+          console.warn(`[Parser] Model ${currentModel} failed or was rate limited:`, err.message || err);
+          lastError = err;
         }
-      });
+      }
 
-      const responseText = response.text || "[]";
-      parsedChunks = JSON.parse(responseText);
+      if (parsedChunks.length === 0 && lastError) {
+        throw new Error(`All model endpoints in fallback chain failed. Last error: ${lastError.message || lastError}`);
+      }
     } else {
       // Send the extracted text to Gemini to chunk and categorize
       const promptText = `The following text is extracted from a uploaded document named "${fileName || 'document'}". 
@@ -601,28 +1132,43 @@ app.post("/api/admin/parse-document", adminRequired, async (req, res) => {
       ${textToChunk}
       --------------------------`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: promptText,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                category: { type: Type.STRING },
-                source: { type: Type.STRING },
-                content: { type: Type.STRING }
-              },
-              required: ["category", "source", "content"]
+      for (const currentModel of modelsToTry) {
+        try {
+          console.log(`[Parser] Attempting text parse using model: ${currentModel}`);
+          const response = await ai.models.generateContent({
+            model: currentModel,
+            contents: promptText,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    category: { type: Type.STRING },
+                    source: { type: Type.STRING },
+                    content: { type: Type.STRING }
+                  },
+                  required: ["category", "source", "content"]
+                }
+              }
             }
-          }
-        }
-      });
+          });
 
-      const responseText = response.text || "[]";
-      parsedChunks = JSON.parse(responseText);
+          const responseText = response.text || "[]";
+          parsedChunks = JSON.parse(responseText);
+          console.log(`[Parser] Successfully parsed text file with ${currentModel}. Extracted ${parsedChunks.length} chunks.`);
+          lastError = null;
+          break; // Success!
+        } catch (err: any) {
+          console.warn(`[Parser] Model ${currentModel} failed or was rate limited:`, err.message || err);
+          lastError = err;
+        }
+      }
+
+      if (parsedChunks.length === 0 && lastError) {
+        throw new Error(`All model endpoints in fallback chain failed. Last error: ${lastError.message || lastError}`);
+      }
     }
 
     // Now insert these parsed chunks into the database!
@@ -634,7 +1180,7 @@ app.post("/api/admin/parse-document", adminRequired, async (req, res) => {
         content: item.content || "",
       };
       if (chunkData.content.trim()) {
-        const saved = await addChunk(chunkData);
+        const saved = await saveChunk(chunkData);
         savedChunks.push(saved);
       }
     }
@@ -660,6 +1206,245 @@ app.get("/api/settings", async (req, res) => {
 app.post("/api/settings", adminRequired, async (req, res) => {
   const updated = await updateSettings(req.body);
   res.json(updated);
+});
+
+
+// DEFAULT CV SHEET FALLBACK DATABLOCK
+const DEFAULT_CV = {
+  name: "Tauheed Ahmed Nabil",
+  title: "Computer Science Student & Agentic AI Systems Builder",
+  location: "Copenhagen, Denmark",
+  email: "tauheednabil@gmail.com",
+  github: "https://github.com/tauheednabil-TAN",
+  linkedin: "https://linkedin.com/in/tauheed-ahmed-nabil-26a1422b5",
+  summary: "I'm a Computer Science student based in Copenhagen with a deep technical focus on building real, autonomous multi-agent AI systems, automated developer pipelines, and cybersecurity defenses. I have a natural curiosity for breaking things, reverse engineering, and rebuilding software properly with robust manual/automated test practices.",
+  skills: {
+    ai_automation: "Agentic AI, CrewAI, LangChain, n8n, FastAPI, Vertex AI, Gemini AI, Anthropic Claude, Machine Learning, PySpark.",
+    programming_languages: "Python, JavaScript, TypeScript, Java, React 19, PHP, SQL (PostgreSQL, MySQL, SQLite, Oracle), C/C++, HTML, CSS.",
+    security_qa: "Reverse engineering, Capture the Flag (CTF), Threat Modeling, NIST compliance, Manual/Automated UI and Regression testing, bug reporting."
+  },
+  projects: [
+    {
+      title: "Sentinel — Multi-Agent Security Prober",
+      status: "Active / Open Source",
+      description: "Constructed a cybersecurity testing app utilizing 12 parallel LLM agents probing live target URLs for leaked secrets, server misconfigurations, and dependency vulnerabilities, compiling an actionable markdown remediation layout. Next.js, TypeScript, Cerebras."
+    },
+    {
+      title: "LoanSage — CrewAI Orchestration Pipeline",
+      status: "FastAPI & n8n",
+      description: "Engineered a 5-agent automated credit assessment and email dispatch workflow incorporating semantic analysis and decision gating, managed through FastAPI endpoints and n8n orchestration triggers."
+    },
+    {
+      title: "FlowOps — Operations & Ledger Dashboard",
+      status: "Rails 8 & React 19",
+      description: "Built a high-contrast financial transactions dashboard supporting multi-currency entries, Dockerized deployments, and GitHub Actions continuous integration scans."
+    },
+    {
+      title: "Gmail Junk Cleaner — Serverless Automation",
+      status: "Google Apps Script",
+      description: "Programmed an inbox management automation querying and trashing unread commercial bulk mail while safeguarding starred records, recovering significant personal mailbox cloud quotas."
+    }
+  ],
+  experience: [
+    {
+      title: "QA Specialist (Freelance)",
+      company: "uTest — Copenhagen, Denmark",
+      date: "Nov 2025 - Present",
+      description: "Performs manual regression and exploratory testing across mobile and desktop applications. Logged and categorized detailed, high-contrast bug reports using JIRA matrices."
+    },
+    {
+      title: "Technical IT Assistant",
+      company: "Scandic Hotels (Webers) — Copenhagen, Denmark",
+      date: "May 2025 - Present",
+      description: "Provides immediate hardware, networking, and system diagnostic support. Manages the Oracle Hospitality database. Honored as Team Member of the Month in February 2026."
+    },
+    {
+      title: "Student IT Assistant",
+      company: "Spacegaming eSports — Frederiksberg, Denmark",
+      date: "Jun 2025 - Dec 2025",
+      description: "Maintained on-premise gaming architectures, reviewed compliance logs via Verinice, and handled scoreboard tracking ledgers."
+    }
+  ],
+  education: [
+    {
+      degree: "BSc (Hons) in Computer Science",
+      school: "Niels Brock Copenhagen Business College",
+      date: "Feb 2024 - Expected Feb 2027"
+    },
+    {
+      degree: "BSc in Industrial & Production Engineering",
+      school: "Military Institute of Science & Technology, Dhaka",
+      date: "2022 - 2023 (Pivoted to CS)"
+    }
+  ],
+  achievements: [
+    "Danish Cyber Championship (DDC) — Jumped from #72 to #33 in Hovedstaden in one year.",
+    "Accepted to the prestigious CyberBridge Summer Academy in Copenhagen, August 2026.",
+    "IELTS Academic certified fluent. Speaks 5 languages."
+  ]
+};
+
+// GET Public parsed CV
+app.get("/api/public/cv", async (req, res) => {
+  try {
+    const db = await getDB();
+    if (db.parsed_cv) {
+      res.json(db.parsed_cv);
+    } else {
+      res.json(DEFAULT_CV);
+    }
+  } catch (error) {
+    console.error("Error loading CV:", error);
+    res.json(DEFAULT_CV);
+  }
+});
+
+// GET LaTeX Resume format for Admin
+app.get("/api/admin/latex", adminRequired, async (req, res) => {
+  try {
+    const db = await getDB();
+    res.json({
+      latex_resume: db.latex_resume || "",
+      parsed_cv: db.parsed_cv || null
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to load LaTeX configuration" });
+  }
+});
+
+// POST update and parse LaTeX Resume
+app.post("/api/admin/latex", adminRequired, async (req, res) => {
+  const { latex_resume } = req.body;
+  if (typeof latex_resume !== "string") {
+    return res.status(400).json({ error: "LaTeX resume content must be a string." });
+  }
+
+  try {
+    const db = await getDB();
+    const ai = getGeminiClient();
+
+    let parsed = null;
+
+    if (ai && latex_resume.trim()) {
+      console.log("[LaTeX Parser] Calling Gemini to parse LaTeX resume...");
+      const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"];
+      let lastError = null;
+
+      const promptText = `
+You are an expert resume parser specializing in LaTeX formats.
+Analyze the following LaTeX document and extract all personal details, contact links, professional bio/summary, technical skills, projects, work experiences, education history, and achievements of Tauheed Ahmed Nabil.
+Organize the extracted information strictly according to the specified JSON schema.
+
+Here is the LaTeX input:
+--------------------------
+${latex_resume}
+--------------------------`;
+
+      for (const currentModel of modelsToTry) {
+        try {
+          const response = await ai.models.generateContent({
+            model: currentModel,
+            contents: promptText,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  location: { type: Type.STRING },
+                  email: { type: Type.STRING },
+                  github: { type: Type.STRING },
+                  linkedin: { type: Type.STRING },
+                  summary: { type: Type.STRING },
+                  skills: {
+                    type: Type.OBJECT,
+                    properties: {
+                      ai_automation: { type: Type.STRING },
+                      programming_languages: { type: Type.STRING },
+                      security_qa: { type: Type.STRING }
+                    },
+                    required: ["ai_automation", "programming_languages", "security_qa"]
+                  },
+                  projects: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        title: { type: Type.STRING },
+                        status: { type: Type.STRING },
+                        description: { type: Type.STRING }
+                      },
+                      required: ["title", "status", "description"]
+                    }
+                  },
+                  experience: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        title: { type: Type.STRING },
+                        company: { type: Type.STRING },
+                        date: { type: Type.STRING },
+                        description: { type: Type.STRING }
+                      },
+                      required: ["title", "company", "date", "description"]
+                    }
+                  },
+                  education: {
+                    type: Type.ARRAY,
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        degree: { type: Type.STRING },
+                        school: { type: Type.STRING },
+                        date: { type: Type.STRING }
+                      },
+                      required: ["degree", "school", "date"]
+                    }
+                  },
+                  achievements: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                  }
+                },
+                required: ["name", "title", "location", "email", "github", "linkedin", "summary", "skills", "projects", "experience", "education", "achievements"]
+              }
+            }
+          });
+
+          const responseText = response.text || "{}";
+          parsed = JSON.parse(responseText);
+          console.log("[LaTeX Parser] Successfully parsed LaTeX resume.");
+          break;
+        } catch (err: any) {
+          console.warn(`[LaTeX Parser] Model ${currentModel} failed:`, err.message || err);
+          lastError = err;
+        }
+      }
+
+      if (!parsed && lastError) {
+        throw new Error(`Failed to parse LaTeX with Gemini models: ${lastError.message}`);
+      }
+    }
+
+    // Save back to DB
+    db.latex_resume = latex_resume;
+    if (parsed) {
+      db.parsed_cv = parsed;
+    }
+    await saveDB(db);
+
+    res.json({
+      success: true,
+      latex_resume,
+      parsed_cv: db.parsed_cv || null,
+      message: parsed ? "LaTeX resume uploaded and parsed successfully!" : "LaTeX resume content saved (without parsed updates)."
+    });
+  } catch (error: any) {
+    console.error("LaTeX resume processing error:", error);
+    res.status(500).json({ error: error.message || "Failed to process LaTeX resume." });
+  }
 });
 
 

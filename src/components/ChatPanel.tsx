@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, MessageSquare, RefreshCw, AlertCircle, Paperclip, FileText } from "lucide-react";
+import { Send, Sparkles, MessageSquare, RefreshCw, AlertCircle } from "lucide-react";
 import { SceneState } from "../types.js";
 
 interface ChatPanelProps {
   onStateChange: (state: SceneState, text: string) => void;
+  onNavigate?: (page: "hub" | "chat" | "roadmap" | "blog" | "booking" | "cv" | "admin") => void;
 }
 
 interface Message {
@@ -59,8 +60,14 @@ const renderMessageText = (text: string) => {
   });
 };
 
-export default function ChatPanel({ onStateChange }: ChatPanelProps) {
+export default function ChatPanel({ onStateChange, onNavigate }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([
+    "Tell me about your AI Sentinel project! 🛡️",
+    "Explain your LoanSage 5-agent pipeline! 🤖",
+    "What are your cybersecurity skills? 🔒",
+    "Can we schedule a meeting? 📅"
+  ]);
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "nabil",
@@ -70,7 +77,24 @@ export default function ChatPanel({ onStateChange }: ChatPanelProps) {
   ]);
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch dynamic suggestions on mount
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      try {
+        const res = await fetch("/api/chat/suggestions");
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setSuggestions(data);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load chat suggestions:", err);
+      }
+    };
+    loadSuggestions();
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -135,22 +159,6 @@ export default function ChatPanel({ onStateChange }: ChatPanelProps) {
     }
   };
 
-  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.name.endsWith(".pdf") && file.type !== "application/pdf") {
-      alert("Please upload a valid PDF document. (⌐■_■)");
-      return;
-    }
-
-    // Trigger local character analysis with the PDF file name
-    handleSend(`Analyze my PDF resume: ${file.name}`, file.name);
-    
-    // Reset file input value so same file can be selected again
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handleSend(input);
@@ -201,6 +209,31 @@ export default function ChatPanel({ onStateChange }: ChatPanelProps) {
               }`}
             >
               {renderMessageText(msg.text)}
+
+              {msg.sender === "nabil" && 
+                i > 0 &&
+                messages[i - 1]?.sender === "user" &&
+                /\b(meet|coffee|schedule|book|calendar|appointment|call|zoom|teams|sync|connect|interview)\b/i.test(messages[i - 1]?.text || "") && (
+                <div className="mt-3 p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex flex-col sm:flex-row justify-between items-center gap-3.5 animate-comic-pop select-none">
+                  <div className="text-left">
+                    <p className="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
+                      <span>📅 Calendar Sync Active</span>
+                    </p>
+                    <p className="text-[10px] text-stone-400 mt-0.5 leading-normal">
+                      Tauheed lives in Copenhagen. Pick a 30-min slot automatic invite!
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate && onNavigate("booking")}
+                    className="px-3.5 py-2 bg-amber-600 hover:bg-amber-500 text-stone-950 font-black text-xs rounded-xl transition-all cursor-pointer whitespace-nowrap active:scale-95 shadow-lg shadow-amber-950/20 flex items-center gap-1"
+                  >
+                    <span>Choose Slot</span>
+                    <span>➔</span>
+                  </button>
+                </div>
+              )}
             </div>
             <span className="text-[10px] text-stone-500 mt-1.5 font-mono">{msg.time}</span>
           </div>
@@ -222,7 +255,7 @@ export default function ChatPanel({ onStateChange }: ChatPanelProps) {
 
       {/* Suggestion pills */}
       <div className="px-3 py-2 bg-black/30 border-t border-white/5 flex gap-2 overflow-x-auto whitespace-nowrap scrollbar-none">
-        {QUICK_SUGGESTIONS.map((s, idx) => (
+        {suggestions.map((s, idx) => (
           <button
             key={idx}
             onClick={() => handleSend(s)}
@@ -236,25 +269,6 @@ export default function ChatPanel({ onStateChange }: ChatPanelProps) {
 
       {/* Input bar */}
       <form onSubmit={handleSubmit} className="p-3 bg-white/[0.01] backdrop-blur-md border-t border-white/10 flex gap-2">
-        {/* Hidden File Input for PDF */}
-        <input 
-          type="file"
-          ref={fileInputRef}
-          onChange={handlePdfUpload}
-          accept=".pdf"
-          className="hidden"
-        />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={loading}
-          className="px-3 bg-zinc-900 hover:bg-zinc-850 text-stone-300 hover:text-amber-400 border border-white/10 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-40"
-          title="Submit PDF resume/document (⌐■_■)"
-        >
-          <Paperclip className="w-4 h-4" />
-          <span className="hidden sm:inline text-xs font-display">PDF</span>
-        </button>
-
         <input
           type="text"
           value={input}

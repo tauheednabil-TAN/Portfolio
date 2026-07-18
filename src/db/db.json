@@ -1,0 +1,371 @@
+{
+  "knowledge_chunks": [
+    {
+      "category": "about",
+      "source": "Profile Overview",
+      "content": "Who is Nabil? I'm Tauheed Ahmed Nabil (everyone calls me Nabil), a computer science student based in Copenhagen, Denmark. I build real, complex multi-agent AI systems, automated workflows, and full-stack software from curiosity up, and I'm deeply passionate about cybersecurity (especially reverse engineering) and QA/Testing. My vibe is warm, curious, persistent, and I'm always looking for strong mentorship and opportunities to learn. Headline: CS Student · Agentic AI & Automation Builder · Cybersecurity · QA Tester.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-72096ef3-4a45-4a98-a71a-3163b3b043c5"
+    },
+    {
+      "category": "education",
+      "source": "Education History",
+      "content": "Nabil's Education: He is studying for a BSc (Hons) in Computer Science at Niels Brock Copenhagen Business College (2024 to expected Feb 2027). Core coursework includes Data Structures & Algorithms, Full-Stack Web Development, Big Data & Machine Learning, Operating Systems & Networks, Web Application Development, Agile Development Team Project. Previously, he studied BSc Industrial & Production Engineering at the Military Institute of Science and Technology, Dhaka (2022 to 2023) before switching to Computer Science to follow his passion for building software.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-2f60945e-55fd-44b1-a02e-d92f1dfa8c8c"
+    },
+    {
+      "category": "skills",
+      "source": "Technical Skills",
+      "content": "Nabil's Skills: AI & Automation: Agentic AI, Multi-agent orchestration, CrewAI, LangChain, n8n, FastAPI, Vertex AI, Gemini AI, Anthropic Claude, Generative AI, PySpark, Machine Learning, TF-IDF. Programming Languages: Python, JavaScript, TypeScript, Java, React (React 19), SQL, PHP, C/C++, HTML, CSS. Data & APIs: REST APIs, PostgreSQL, MySQL, SQLite, Oracle, Power BI. Cybersecurity: reverse engineering, Capture the Flag (CTF), threat awareness, incident response, governance & compliance (NIST, Zero Trust), web security scanning, Verinice. Testing: manual testing, UI/UX, regression, system testing, bug reporting, test cases, test reporting. Tools & Systems: Docker, GitHub Actions, Git, Jira, Linux (Ubuntu, Kali), MS 365. Languages: English (fluent), Bengali (native), Hindi (fluent), Urdu (fluent), and beginner Danish.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-cb25a295-fccb-494d-ad6b-58e7a6198d28"
+    },
+    {
+      "category": "experience",
+      "source": "Work Experience",
+      "content": "Nabil's Experience:\n1. QA Tester at uTest (freelance), Nov 2025 to present, Copenhagen. Performs exploratory and structured testing of web and mobile products, writing detailed, version-tracked bug reports, and validating complex edge cases across browsers and operating systems.\n2. Technical Assistant at Scandic Hotels (Webers), May 2025 to present, Copenhagen. Handles IT support, maintenance, and the Oracle Hospitality database. Voted Team Member of the Month in February 2026 by his colleagues.\n3. Student IT Assistant at Spacegaming eSports, June to Dec 2025, Frederiksberg. Maintained systems, tracked tournament data in Excel, used Verinice for risk and security monitoring, and reviewed logs as a competition examiner.\n4. Country Manager at International Youth Summit, 2022 to 2023, remote. Handled outreach, workshops, and university partnerships.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-bf40631c-c5d7-417e-a2e9-7e22c0755b28"
+    },
+    {
+      "category": "projects",
+      "source": "Project: Sentinel",
+      "content": "Project Sentinel: An AI cybersecurity scanner where 12 parallel agents probe a live URL for exposed credentials/files, missing security headers, leaked API keys, and outdated dependencies, returning a clean, actionable markdown report. Built with Next.js, TypeScript, and Cerebras AI. Live and open-source! Honest backstory: Nabil's first version faked its findings; rebuilding it to fetch and probe real live data taught him more than any tutorial ever could.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-8a42d282-5fbf-47de-8301-5025604e046d"
+    },
+    {
+      "category": "projects",
+      "source": "Project: LoanSage",
+      "content": "Project LoanSage: A 5-agent CrewAI automated loan-approval pipeline (consisting of Cleanup, Decision, Guardrail, Email Writer, and Next Best Offer agents) orchestrated with FastAPI and n8n, incorporating a manual/automated safety guardrail before any offer is sent to customers.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-16cede0f-4555-423c-ba72-25adf58c7889"
+    },
+    {
+      "category": "projects",
+      "source": "Project: OrderBot",
+      "content": "Project OrderBot: An autonomous business agent built in Vertex AI that checks customer account status in Salesforce, reads live inventory levels from Google Sheets, and makes intelligent shipping routing decisions end-to-end. Built as part of the Datacom Automation AI Accelerator on Forage.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-f898ba35-3f46-4901-88a4-c697e3a3ae36"
+    },
+    {
+      "category": "projects",
+      "source": "Project: FlowOps",
+      "content": "Project FlowOps: A complete, full-stack payments operations dashboard. Built with React 19 + TypeScript on a Ruby on Rails 8 API with PostgreSQL. Dockerized with GitHub Actions CI running Brakeman and Bundler-Audit security scans. Seeded with 200+ multi-currency transactions.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-10d79d72-8c3d-4b22-86a2-0e5bfabcf28c"
+    },
+    {
+      "category": "projects",
+      "source": "Project: Gmail Junk Cleaner",
+      "content": "Project Gmail Junk Cleaner: A privacy-first Google Apps Script automation agent that safely batch-cleans a mailbox (targets big or old mail, respects starred items, keeps all data within Nabil's own account). Nabil coded this because he once had over 10,000 unread emails and wanted to avoid paying for storage!",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-5fd1d274-9e07-40fb-a4b7-196a5939ad74"
+    },
+    {
+      "category": "projects",
+      "source": "Project: Big Data coursework",
+      "content": "Project PySpark Crime & Loan Analysis: Big-data coursework featuring UK crime data ETL plus a Spark ML loan-approval pipeline (Logistic Regression, Decision Tree, Linear SVC). Built with Python, PySpark, pandas, and matplotlib.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-2674ef0e-c812-4f65-9cc4-7a7578f7e0bf"
+    },
+    {
+      "category": "projects",
+      "source": "Project: CodeFlix",
+      "content": "Project CodeFlix: An AI movie recommendation and watchlist application featuring a Gemini chatbot, TF-IDF similarity, and the OMDb API. Built with Python and SQLite. Nabil led both the AI development and the Scrum process.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-f66a11f7-8fb3-4c5a-9e4d-55273eb2e219"
+    },
+    {
+      "category": "projects",
+      "source": "Project: Student Course Hub & JavaFX Module Chooser",
+      "content": "Projects Course Hub & JavaFX: 1. Student Course Hub: A PHP-MVC + MySQL web application with role-based access control, secure coding (prepared statements, password hashing), and detailed architectural documentation.\n2. JavaFX Module Chooser: An MVC desktop application for students to select and validate final-year academic modules, featuring XML profile persistence and file export.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-4285e3fe-843b-4426-90dc-672ccba71b3e"
+    },
+    {
+      "category": "faq",
+      "source": "Interests & Fun Facts",
+      "content": "Nabil's Interests & Fun Facts:\n- He switched from mechanical/industrial engineering to CS because he fell in love with building software.\n- He speaks 5 languages: English (fluent), Bengali (native), Hindi (fluent), Urdu (fluent), and beginner Danish.\n- He built a Gmail junk cleaner instead of paying for extra Google storage.\n- He genuinely builds multi-agent AI systems for fun on weekends.\n- He jumped from #72 to #33 in Hovedstaden in the Danish Cyber Championships (DDC) in a single year; reverse engineering is his favorite CTF category!\n- He has been accepted to the prestigious CyberBridge Summer School in Copenhagen, August 2026.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-88a6418f-27a8-4afe-ba1d-146b24fd7693"
+    },
+    {
+      "category": "faq",
+      "source": "Certifications",
+      "content": "Nabil's Certifications: Claude Code in Action — Anthropic (2026); Generative AI Mastermind — Outskill (2026); Datacom Automation AI Accelerator — Forage (where he built OrderBot). Cybersecurity certs: Mastercard, Clifford Chance (Governance & Compliance), PwC (ITGC, Risk Assessment), Lloyds Future Ready Cyber; ISO 19650 Information Management. IELTS Academic (valid to Feb 2027).",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-f482ff2b-358c-40f2-b1e0-2aa6d0e47abf"
+    },
+    {
+      "category": "faq",
+      "source": "Current learning focus",
+      "content": "Nabil is currently going deeper into agentic AI (multi-agent orchestration, safety guardrails, automated workflows) and hands-on cybersecurity (reverse engineering, Capture the Flag, defensive security) in preparation for the CyberBridge Summer School in August 2026.",
+      "created_at": "2026-07-17T21:57:39.692Z",
+      "id": "chunk-27479e27-d15d-47ea-9589-b665e882b1c5"
+    },
+    {
+      "category": "about",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Tauheed Ahmed Nabil, who goes by Nabil, is a Computer Science student in Copenhagen, Denmark, residing at Hesselengen 2, 2.mf, 2625 Vallensbæk. He is a passionate builder of agentic AI systems, a cybersecurity enthusiast, and a QA Tester. Warm, curious, and persistent, Nabil is always seeking mentorship and learning opportunities by building and breaking systems. His contact info includes phone: +45 71420406, email: tauheednabil@gmail.com, LinkedIn: linkedin.com/in/tauheed-ahmed-nabil-26a1422b5, GitHub: github.com/tauheednabil-TAN, and his live cybersecurity project: how-secured-my-website-ai.com.",
+      "id": "chunk-c5a45f65-9cbe-45ac-8e2e-cf325675a8de",
+      "created_at": "2026-07-17T23:06:53.748Z"
+    },
+    {
+      "category": "education",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Nabil is pursuing a BSc in Computer Science at Niels Brock Copenhagen Business College from 2024 to February 2027 (expected). His core coursework includes Data Structures & Algorithms, Full-Stack Web Development, Big Data & Machine Learning, Operating Systems & Networks, Web Application Development, and an Agile Development Team Project where he was the Scrum Master utilizing Jira. Prior to his CS studies, he studied BSc Industrial & Production Engineering at the Military Institute of Science and Technology in Dhaka from 2022 to 2023.",
+      "id": "chunk-75dc774d-20ac-418c-9ddb-7a716aed5a43",
+      "created_at": "2026-07-17T23:06:53.751Z"
+    },
+    {
+      "category": "experience",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Nabil has diverse technical experience: 1) QA Tester at uTest (freelance, Nov 2025 - present, Copenhagen), executing exploratory and structured web/mobile testing and filing detailed bug reports. 2) Technical Assistant at Scandic Hotels (Webers) (May 2025 - present, Copenhagen), providing IT/maintenance support and Oracle Hospitality database management, earning Team Member of the Month in Feb 2026. 3) Student IT Assistant at Spacegaming eSports (Jun - Dec 2025, Frederiksberg), handling system maintenance, log review, and risk/security monitoring with Verinice. 4) Country Manager at International Youth Summit (2022 - 2023, remote), managing outreach, workshops, and university partnerships.",
+      "id": "chunk-7d517a07-70d0-4466-852a-7e1abff6dc8b",
+      "created_at": "2026-07-17T23:06:53.752Z"
+    },
+    {
+      "category": "skills",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Nabil's extensive technical skills span AI & Automation (Agentic AI, CrewAI, LangChain, n8n, FastAPI, Vertex AI, Cerebras AI, Gemini, Claude, Generative AI, PySpark, Machine Learning, RAG, prompt engineering, LLM grounding), programming languages (Python, JavaScript, TypeScript, Java, Kotlin, React 19, SQL, PHP, C/C++, HTML, CSS), frameworks (Next.js, Ruby on Rails, Expo, React Native, Supabase, JavaFX), database systems (PostgreSQL, MySQL, SQLite, Oracle), cybersecurity (reverse engineering, CTF, NIST, Zero Trust, Verinice), testing (manual, regression, system testing, UI/UX), and operational tools (Docker, GitHub Actions, Git, Jira, Linux).",
+      "id": "chunk-5fa70694-f43e-4911-9f97-3d42a2faba9d",
+      "created_at": "2026-07-17T23:06:53.752Z"
+    },
+    {
+      "category": "projects",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Nabil has developed several advanced AI and web projects. Key builds include: 1) Sentinel (live at how-secured-my-website-ai.com), an open-source security scanner that employs 12 parallel agents using Cerebras AI, Next.js, and TypeScript to scan live URLs for vulnerabilities and output patchable PDF reports. 2) LoanSage, a 5-agent loan-approval pipeline using CrewAI, FastAPI, and n8n with an integrated safety guardrail. 3) OrderBot, an autonomous agent in Vertex AI that processes accounts in Salesforce and reads live inventory in Google Sheets to make end-to-end routing decisions.",
+      "id": "chunk-79561af0-560e-4467-8a4c-c341b36b7698",
+      "created_at": "2026-07-17T23:06:53.753Z"
+    },
+    {
+      "category": "projects",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Other notable projects by Nabil include: 1) FlowOps, a payments dashboard built with React 19, TypeScript, and a Ruby on Rails 8 API with PostgreSQL and Docker. 2) JobOps, an office-themed job-hunting tool in TypeScript. 3) Gmail Junk Cleaner, a privacy-first Google Apps Script agent. 4) PySpark Crime & Loan Analysis, an ETL and Spark ML pipeline. 5) CodeFlix, an AI movie recommendation app using a Gemini chatbot and TF-IDF similarity. He also developed Sparks (knowledge app), GlassBridge (PC file transfer app), LetHookup (iOS verification app), and Personal Audio Relax Mix (Android Kotlin app).",
+      "id": "chunk-e0e13247-22aa-4de7-a052-17662a2317db",
+      "created_at": "2026-07-17T23:06:53.754Z"
+    },
+    {
+      "category": "other",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Nabil has earned several certificates and achievements, including Claude Code in Action (Anthropic, 2026), Generative AI Mastermind (Outskill, 2026), and Datacom Automation AI Accelerator (Forage). In Cybersecurity, he completed challenges and certifications from Mastercard, Clifford Chance (Governance & Compliance), PwC (ITGC, Risk Assessment), Lloyds Future Ready Cyber, and ISO 19650. He climbed from rank #72 to #33 in one year in Hovedstaden for De Danske Cybermesterskaber (DDC), specializing in reverse engineering, and is accepted to the CyberBridge Summer School in August 2026.",
+      "id": "chunk-ac32db32-83cc-4a9c-85fa-0349abf9e547",
+      "created_at": "2026-07-17T23:06:53.754Z"
+    },
+    {
+      "category": "faq",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Frequently Asked Questions about Nabil: 1) Why did he switch from industrial engineering to Computer Science? He fell in love with building software. 2) What languages does he speak? He is multilingual, speaking fluent English, Bengali, Hindi, Urdu, and beginner Danish. 3) Why did he code the Gmail Junk Cleaner? He had over 10,000 unread emails and coded the agent to clean them to avoid paying for extra storage. 4) What is his current focus? He is deepening his skills in multi-agent orchestration, guardrails, and hands-on defensive security.",
+      "id": "chunk-08ac314f-bf2e-4597-b5f0-38c7bd702d61",
+      "created_at": "2026-07-17T23:06:53.755Z"
+    },
+    {
+      "category": "other",
+      "source": "Document: Nabil_context_for_Gemini.md",
+      "content": "Nabil uses two distinct writing styles. 1) LinkedIn Voice: Energetic, honest, story-first, admitting system flaws/vulnerabilities, using concrete metrics, occasional emojis, and hashtags like #BuildInPublic and #AIagents. 2) Cover Letter Voice: Warm, humble, highly focused on mentorship and growth, tailored to the specific company, and strictly avoids any dash characters (em, en, or regular dashes as separators).",
+      "id": "chunk-fe124bcf-7e29-41f6-b1a1-56fdffcf1043",
+      "created_at": "2026-07-17T23:06:53.756Z"
+    }
+  ],
+  "posts": [
+    {
+      "id": "post-1",
+      "title": "Why I Built My Own 10,000+ Email Inbox Cleaning Agent",
+      "body_md": "### The Backstory\nI had over 10,000 unread emails piling up in my Gmail inbox. Standard newsletters, promotional coupon offers, notifications from old forums, and spam. It was starting to trigger Google's storage warnings. Instead of paying Google for an extra storage tier, I realized: *I'm a computer science student, I should solve this with code.*\n\n### The Solution\nI decided to build **Gmail Junk Cleaner**, a privacy-first, serverless script written in Google Apps Script that lives entirely inside my personal Google account (no third-party data access). \n\n```js\n// Simple cleaning filter snippet\nfunction cleanMailInbox() {\n  const threads = GmailApp.search('is:unread category:promotions older_than:30d');\n  for (let i = 0; i < threads.length; i++) {\n    if (!threads[i].isStarred()) {\n      threads[i].moveToTrash();\n    }\n  }\n}\n```\n\n### What it does\n1. Target heavy/large attachment emails.\n2. Safely groups promotional newsletters older than 30 days.\n3. Strictly respects **starred** or flagged conversations to ensure no important correspondence is lost.\n4. Keeps all execution and security inside my Google OAuth sandbox.\n\nBuilding this showed me the pure joy of automation: writing code to solve your own boring, daily problems! ☕",
+      "image_url": "",
+      "tags": [
+        "Google Apps Script",
+        "Automation",
+        "Workflow",
+        "Productivity"
+      ],
+      "published": true,
+      "created_at": "2026-07-12T21:57:39.692Z"
+    },
+    {
+      "id": "post-2",
+      "title": "From Mechanical Engineering to Coding Multi-Agent Systems",
+      "body_md": "### The Decision to Pivot\nBack in 2022, I was studying Industrial & Production Engineering at MIST. I liked modeling and optimization, but I felt something was missing. I wanted to build the tools myself, not just manage the production floors. On weekends, I spent hours learning Python, writing automation macros, and exploring algorithms. In late 2023, I made the jump: moving to Copenhagen to pursue a BSc in Computer Science at Niels Brock.\n\n### Why Multi-Agent Systems?\nTraditional software takes input A and outputs B. But in **agentic AI**, you define a pool of specialized agents, give them goals, tools, and a communication structure (like CrewAI), and let them collaborate asynchronously. \n\nFor example, in **LoanSage**, my pipeline works like this:\n1. **Cleanup Agent** formats and validates user input.\n2. **Decision Agent** queries credit scoring rules.\n3. **Guardrail Agent** runs a security policy scan.\n4. **Email Writer Agent** crafts the formal response.\n5. **Next Best Offer Agent** recommends alternative tailored loan schemes.\n\nIt feels like directing a team of experts inside a digital coffee shop! If you're starting out in CS, don't just follow standard tutorials: find a project that excites you, make it fully real, break it, and rebuild it properly.",
+      "image_url": "",
+      "tags": [
+        "Computer Science",
+        "Career Pivot",
+        "AI Agents",
+        "CrewAI"
+      ],
+      "published": true,
+      "created_at": "2026-07-15T21:57:39.692Z"
+    },
+    {
+      "id": "post-2b373716-0000-4c31-b0b3-fa8d50b6abd3",
+      "title": "First post",
+      "body_md": "It is my first post",
+      "tags": [
+        "First"
+      ],
+      "published": true,
+      "image_url": "/uploads/e84526b4-632e-4617-a895-8b0df2cb0b31.png?v=100",
+      "video_url": "",
+      "created_at": "2026-07-17T23:41:23.301Z"
+    }
+  ],
+  "roadmap_nodes": [
+    {
+      "id": "milestone-1",
+      "parent_id": null,
+      "title": "The Engineering Foundations",
+      "description": "Deep dive into Industrial/Production Engineering and the transition to Computer Science.",
+      "status": "done",
+      "sort_order": 1,
+      "icon": "GraduationCap",
+      "date_label": "2022 - 2023"
+    },
+    {
+      "id": "sub-1-1",
+      "parent_id": "milestone-1",
+      "title": "Industrial & Production Engineering",
+      "description": "Studied core engineering principles, materials science, and optimization modeling at MIST, Dhaka.",
+      "status": "done",
+      "sort_order": 1,
+      "icon": "Activity",
+      "date_label": "2022 - 2023"
+    },
+    {
+      "id": "sub-1-2",
+      "parent_id": "milestone-1",
+      "title": "The CS Epiphany",
+      "description": "Fell in love with software development, coding custom scripts on weekends, leading to a major decision to pivot study streams.",
+      "status": "done",
+      "sort_order": 2,
+      "icon": "Sparkles",
+      "date_label": "Late 2023"
+    },
+    {
+      "id": "milestone-2",
+      "parent_id": null,
+      "title": "Copenhagen Academic Leap",
+      "description": "Enrolled in BSc Hons Computer Science at Niels Brock, Copenhagen.",
+      "status": "done",
+      "sort_order": 2,
+      "icon": "MapPin",
+      "date_label": "Feb 2024 - Present"
+    },
+    {
+      "id": "sub-2-1",
+      "parent_id": "milestone-2",
+      "title": "Core CS Fundamentals",
+      "description": "Mastered Data Structures & Algorithms, OOP with Java, SQL databases, and secure PHP web applications.",
+      "status": "done",
+      "sort_order": 1,
+      "icon": "BookOpen",
+      "date_label": "Spring 2024"
+    },
+    {
+      "id": "sub-2-2",
+      "parent_id": "milestone-2",
+      "title": "Big Data & Machine Learning",
+      "description": "Developed PySpark Crime & Loan Analysis pipelines, exploring large-scale Spark ML modeling.",
+      "status": "done",
+      "sort_order": 2,
+      "icon": "Database",
+      "date_label": "Fall 2024"
+    },
+    {
+      "id": "milestone-3",
+      "parent_id": null,
+      "title": "AI Agents & Hands-on Work",
+      "description": "Building automated AI workflows, multi-agent systems, and working as IT/QA Specialist.",
+      "status": "in_progress",
+      "sort_order": 3,
+      "icon": "Cpu",
+      "date_label": "2025 - Present"
+    },
+    {
+      "id": "sub-3-1",
+      "parent_id": "milestone-3",
+      "title": "QA Specialist at uTest & Scandic",
+      "description": "Started freelance mobile/web QA testing, logging edge cases, and working as IT Tech Assistant at Webers.",
+      "status": "done",
+      "sort_order": 1,
+      "icon": "CheckCircle",
+      "date_label": "2025"
+    },
+    {
+      "id": "sub-3-2",
+      "parent_id": "milestone-3",
+      "title": "Multi-Agent Systems & sentinel",
+      "description": "Created Sentinel (12 parallel cybersecurity agents), LoanSage (CrewAI + n8n pipeline), and Gmail Cleaners.",
+      "status": "in_progress",
+      "sort_order": 2,
+      "icon": "Bot",
+      "date_label": "Early 2026"
+    },
+    {
+      "id": "milestone-4",
+      "parent_id": null,
+      "title": "CyberBridge Summer School & Beyond",
+      "description": "Deep dive into defensive security, advanced reverse engineering, and professional AI orchestration.",
+      "status": "planned",
+      "sort_order": 4,
+      "icon": "ShieldAlert",
+      "date_label": "August 2026 - 2027"
+    },
+    {
+      "id": "sub-4-1",
+      "parent_id": "milestone-4",
+      "title": "CyberBridge Summer Academy",
+      "description": "Accepted to the specialized summer academy in Copenhagen to explore advanced cybersecurity, network threat assessments, and firmware analysis.",
+      "status": "planned",
+      "sort_order": 1,
+      "icon": "Terminal",
+      "date_label": "August 2026"
+    },
+    {
+      "id": "sub-4-2",
+      "parent_id": "milestone-4",
+      "title": "BSc Graduation & Career",
+      "description": "Successfully complete the final BSc CS thesis, build production-grade agentic platforms, and seek professional mentorship.",
+      "status": "planned",
+      "sort_order": 2,
+      "icon": "Trophy",
+      "date_label": "Feb 2027"
+    }
+  ],
+  "bookings": [
+    {
+      "visitor_name": "nad",
+      "visitor_email": "ntauheedahmed@gmail.com",
+      "note": "",
+      "mode": "meet",
+      "start_ts": "2026-07-19T08:00:00.000Z",
+      "end_ts": "2026-07-19T08:30:00.000Z",
+      "id": "booking-e521b703-ee61-4833-93cb-22885a053920",
+      "status": "confirmed",
+      "approval_token": "925f7cff6a1bff6117d0235074185102e31d470215cdb17b",
+      "gcal_event_id": null,
+      "created_at": "2026-07-17T23:21:02.887Z"
+    },
+    {
+      "visitor_name": "asd",
+      "visitor_email": "ntauheedahmed@gmail.com",
+      "note": "",
+      "mode": "meet",
+      "start_ts": "2026-07-20T08:00:00.000Z",
+      "end_ts": "2026-07-20T08:30:00.000Z",
+      "id": "booking-6b11c264-5490-40cb-964e-e21eead8cea5",
+      "status": "declined",
+      "approval_token": "8d1be6107e1e1d3ce8d5c7e1c7d592a48aeca957a696d662",
+      "gcal_event_id": null,
+      "created_at": "2026-07-17T23:37:07.865Z"
+    }
+  ],
+  "settings": {
+    "availabilityHoursStart": "10:00",
+    "availabilityHoursEnd": "18:00",
+    "timezone": "Europe/Copenhagen",
+    "myEmail": "tauheednabil@gmail.com",
+    "inPersonLocation": "Copenhagen, Denmark ☕"
+  }
+}

@@ -11,6 +11,8 @@ export interface BlogPost {
   title: string;
   body_md: string;
   image_url: string;
+  video_url?: string;
+  likes?: number;
   tags: string[];
   published: boolean;
   created_at: string;
@@ -52,12 +54,46 @@ export interface Settings {
   inPersonLocation: string;       // Copenhagen text
 }
 
+export interface ParsedCV {
+  name: string;
+  title: string;
+  location: string;
+  email: string;
+  github: string;
+  linkedin: string;
+  summary: string;
+  skills: {
+    ai_automation: string;
+    programming_languages: string;
+    security_qa: string;
+  };
+  projects: Array<{
+    title: string;
+    status: string;
+    description: string;
+  }>;
+  experience: Array<{
+    title: string;
+    company: string;
+    date: string;
+    description: string;
+  }>;
+  education: Array<{
+    degree: string;
+    school: string;
+    date: string;
+  }>;
+  achievements: Array<string>;
+}
+
 export interface DBStore {
   knowledge_chunks: KnowledgeChunk[];
   posts: BlogPost[];
   roadmap_nodes: RoadmapNode[];
   bookings: Booking[];
   settings: Settings;
+  latex_resume?: string;
+  parsed_cv?: ParsedCV;
 }
 
 export type SceneState =

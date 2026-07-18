@@ -306,8 +306,22 @@ export async function listChunks(): Promise<KnowledgeChunk[]> {
   return db.knowledge_chunks;
 }
 
-export async function addChunk(chunk: Omit<KnowledgeChunk, "id" | "created_at">): Promise<KnowledgeChunk> {
+export async function saveChunk(chunk: Omit<KnowledgeChunk, "id" | "created_at"> & { id?: string }): Promise<KnowledgeChunk> {
   const db = await getDB();
+  if (chunk.id) {
+    const index = db.knowledge_chunks.findIndex((c) => c.id === chunk.id);
+    if (index !== -1) {
+      const updated: KnowledgeChunk = {
+        ...db.knowledge_chunks[index],
+        ...chunk,
+        id: chunk.id,
+      };
+      db.knowledge_chunks[index] = updated;
+      await saveDB(db);
+      return updated;
+    }
+  }
+
   const newChunk: KnowledgeChunk = {
     ...chunk,
     id: `chunk-${crypto.randomUUID()}`,

@@ -66,7 +66,61 @@ export default function App() {
 
   const handleSceneUpdate = (state: SceneState, text: string) => {
     setSceneState(state);
-    setSpeechBubbleText(text);
+    
+    // Condense full chatbot responses into highly expressive 2-3 word comic-style captions
+    let shortCaption = text;
+    if (text.length > 25) {
+      if (state === "welcome") {
+        shortCaption = "Hi, I'm Nabil!";
+      } else if (state === "listening") {
+        shortCaption = "Listening closely...";
+      } else if (state === "thinking") {
+        shortCaption = "Hmm... interesting!";
+      } else if (state === "coffee_invite") {
+        shortCaption = "Let's have coffee!";
+      } else if (state === "celebrate") {
+        shortCaption = "Aha! Cheers! 🎉";
+      } else if (state === "confused") {
+        shortCaption = "Wait, what? 🤔";
+      } else if (state === "idle") {
+        shortCaption = "Let's chat!";
+      } else if (state === "talking") {
+        // Dynamic smart keyword matching for talking responses
+        const lower = text.toLowerCase();
+        if (lower.includes("sentinel") || lower.includes("security") || lower.includes("probing")) {
+          shortCaption = "Shields up! 🛡️";
+        } else if (lower.includes("loansage") || lower.includes("agent") || lower.includes("crewai")) {
+          shortCaption = "Agentic flow! 🤖";
+        } else if (lower.includes("calendar") || lower.includes("meeting") || lower.includes("schedule") || lower.includes("book")) {
+          shortCaption = "Let's align! 📅";
+        } else if (lower.includes("skills") || lower.includes("code") || lower.includes("python") || lower.includes("languages")) {
+          shortCaption = "Code crafted! 💻";
+        } else if (lower.includes("coffee") || lower.includes("cafe")) {
+          shortCaption = "Let's have coffee!";
+        } else if (lower.includes("experience") || lower.includes("history") || lower.includes("utest") || lower.includes("work")) {
+          shortCaption = "My career path!";
+        } else if (lower.includes("achievement") || lower.includes("cyber") || lower.includes("award")) {
+          shortCaption = "Cyber champion! 🏆";
+        } else {
+          // Stable fallback hash to vary general responses
+          const choices = [
+            "Great question!",
+            "Excellent point!",
+            "Hmm... interesting!",
+            "Let's explore!",
+            "That's awesome!",
+            "Let's chat!"
+          ];
+          let hash = 0;
+          for (let i = 0; i < text.length; i++) {
+            hash = text.charCodeAt(i) + ((hash << 5) - hash);
+          }
+          const index = Math.abs(hash) % choices.length;
+          shortCaption = choices[index];
+        }
+      }
+    }
+    setSpeechBubbleText(shortCaption);
   };
 
   const selectPage = (page: typeof activePage) => {
@@ -323,85 +377,42 @@ export default function App() {
           {/* A. VIRTUAL CAFÉ HUB PAGE */}
           {activePage === "hub" && (
             <div className="space-y-10">
-              {/* Grid wrapping both Welcome Hero and the Recruiter Front Widget */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-                
-                {/* Column 1 & 2: Elegant welcoming Hero block with Tauheed's profile summary */}
-                <div className="lg:col-span-2 bg-white/[0.03] backdrop-blur-2xl border border-white/15 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row gap-6 items-center shadow-[0_12px_40px_rgba(0,0,0,0.35)] relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
-                  <div className="w-20 h-20 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center flex-shrink-0 relative shadow-inner">
-                    <span className="text-3xl animate-bounce">🛡️</span>
-                    <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+              
+              {/* Elegant welcoming Hero block with Tauheed's profile summary (Full-width) */}
+              <div className="w-full bg-white/[0.03] backdrop-blur-2xl border border-white/15 rounded-3xl p-6 md:p-8 flex flex-col md:flex-row gap-6 items-center shadow-[0_12px_40px_rgba(0,0,0,0.35)] relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none -z-10" />
+                <div className="w-20 h-20 bg-amber-500/10 border border-amber-500/30 rounded-full flex items-center justify-center flex-shrink-0 relative shadow-inner overflow-hidden">
+                  <img 
+                    id="tauheed-avatar-img"
+                    src="/uploads/e84526b4-632e-4617-a895-8b0df2cb0b31.png?v=100" 
+                    alt="Tauheed Ahmed Nabil" 
+                    className="w-full h-full object-cover rounded-full cursor-pointer hover:scale-110 transition-transform duration-300 ease-out" 
+                    referrerPolicy="no-referrer" 
+                  />
+                  <span className="absolute -bottom-1 -right-1 flex h-3.5 w-3.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500"></span>
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-xl md:text-2xl font-black font-display tracking-tight text-stone-50">
+                    Welcome to the Workspace of Tauheed Ahmed Nabil
+                  </h2>
+                  <p className="text-xs md:text-sm text-stone-300 leading-relaxed max-w-2xl font-medium">
+                    "I am a Copenhagen-based Computer Science student at Niels Brock, specializing in agentic AI development, web vulnerability scanning, and cybersecurity systems. Explore my research milestones, blogs, or chat with my custom-tuned AI avatar below!"
+                  </p>
+                  <div className="flex flex-wrap gap-2.5 pt-1.5">
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-lg">
+                      📍 Copenhagen, Denmark
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-lg">
+                      🎓 BSc (Hons) Computer Science
+                    </span>
+                    <span className="text-[10px] font-mono font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-lg">
+                      🟢 Available for Projects
                     </span>
                   </div>
-                  <div className="space-y-2">
-                    <h2 className="text-xl md:text-2xl font-black font-display tracking-tight text-stone-50">
-                      Welcome to the Workspace of Tauheed Ahmed Nabil
-                    </h2>
-                    <p className="text-xs md:text-sm text-stone-300 leading-relaxed max-w-2xl font-medium">
-                      "I am a Copenhagen-based Computer Science student at Niels Brock, specializing in agentic AI development, web vulnerability scanning, and cybersecurity systems. Explore my research milestones, blogs, or chat with my custom-tuned AI avatar below!"
-                    </p>
-                    <div className="flex flex-wrap gap-2.5 pt-1.5">
-                      <span className="text-[10px] font-mono font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-lg">
-                        📍 Copenhagen, Denmark
-                      </span>
-                      <span className="text-[10px] font-mono font-bold bg-amber-500/10 border border-amber-500/20 text-amber-400 px-3 py-1 rounded-lg">
-                        🎓 BSc (Hons) Computer Science
-                      </span>
-                      <span className="text-[10px] font-mono font-bold bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-1 rounded-lg">
-                        🟢 Available for Projects
-                      </span>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Column 3: The Recruiter-Ready CV Front Widget */}
-                <div className="lg:col-span-1 bg-amber-500/[0.03] backdrop-blur-2xl border border-amber-500/20 rounded-3xl p-6 flex flex-col justify-between shadow-[0_12px_40px_rgba(0,0,0,0.35)] relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl group-hover:bg-amber-500/10 transition-colors pointer-events-none -z-10" />
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">
-                        Recruiter Radar 📡
-                      </span>
-                      <span className="text-[10px] font-mono font-bold text-emerald-400 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                        Hire Ready
-                      </span>
-                    </div>
-                    <div>
-                      <h4 className="text-base font-extrabold font-display text-stone-50 leading-tight">
-                        QA & AI Developer in Copenhagen
-                      </h4>
-                      <p className="text-[11px] text-stone-300 mt-1 leading-relaxed">
-                        Tauheed has a proven track record (uTest QA, Scandic IT, Danish Cyber Championship Top-33). Connect instantly or download/print his complete CV!
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-1.5 mt-3 pt-3 border-t border-white/5">
-                    <button
-                      onClick={() => selectPage("cv")}
-                      className="w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-stone-950 font-black rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer text-xs font-display shadow-md shadow-amber-900/10"
-                    >
-                      <FileText className="w-3.5 h-3.5" /> Full Screen CV Sheet
-                    </button>
-                    <button
-                      onClick={() => {
-                        const cvEl = document.getElementById("homepage-cv-section");
-                        if (cvEl) {
-                          cvEl.scrollIntoView({ behavior: "smooth" });
-                        }
-                      }}
-                      className="w-full py-1.5 bg-zinc-900 hover:bg-zinc-800 text-stone-200 hover:text-stone-50 border border-white/10 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer text-xs font-mono font-bold"
-                    >
-                      <span>Scroll to Inline CV</span>
-                      <span>↓</span>
-                    </button>
-                  </div>
-                </div>
-
               </div>
 
               {/* Organized Bento Grid Menu of Exploration Options */}
@@ -517,69 +528,9 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Informative Stats Block for Recruiter Credibility */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 p-4 rounded-2xl flex items-center gap-3.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.2)]">
-                  <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 flex-shrink-0">
-                    <GraduationCap className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] font-mono text-stone-500 uppercase">Studies</h5>
-                    <p className="text-xs font-bold text-stone-100">BSc (Hons) Computer Science</p>
-                    <p className="text-[10px] text-stone-400">Niels Brock, Denmark</p>
-                  </div>
-                </div>
 
-                <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 p-4 rounded-2xl flex items-center gap-3.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.2)]">
-                  <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 flex-shrink-0">
-                    <Code className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] font-mono text-stone-500 uppercase">Specialization</h5>
-                    <p className="text-xs font-bold text-stone-100">Agentic AI & Autopilot Dev</p>
-                    <p className="text-[10px] text-stone-400">FastAPI, CrewAI, Python, TS</p>
-                  </div>
-                </div>
 
-                <div className="bg-white/[0.02] backdrop-blur-2xl border border-white/10 p-4 rounded-2xl flex items-center gap-3.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.2)]">
-                  <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 flex-shrink-0">
-                    <Briefcase className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h5 className="text-[10px] font-mono text-stone-500 uppercase">Industry</h5>
-                    <p className="text-xs font-bold text-stone-100">IT diagnostics & QA Specialist</p>
-                    <p className="text-[10px] text-stone-400">Scandic Hotels Webers & uTest</p>
-                  </div>
-                </div>
-              </div>
 
-              {/* Recruiter-Ready CV Full Embedded Section on Homepage */}
-              <div id="homepage-cv-section" className="space-y-5 pt-8 border-t border-white/10 scroll-mt-24">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pl-1">
-                  <div>
-                    <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md border border-amber-500/20">
-                      Recruiter Ready CV 📂
-                    </span>
-                    <h3 className="text-lg font-black font-display text-stone-50 mt-2">
-                      Complete Professional Resume & Qualifications
-                    </h3>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      // Trigger native print flow of browser
-                      window.print();
-                    }}
-                    className="self-start sm:self-center text-xs font-mono text-amber-400 hover:text-amber-300 font-extrabold flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 hover:border-amber-500/50 px-4 py-2 rounded-xl transition-all cursor-pointer shadow-lg shadow-amber-500/5"
-                    title="Print or Export CV as PDF"
-                  >
-                    <span>Print/Export PDF</span>
-                    <span>🖨️</span>
-                  </button>
-                </div>
-                
-                {/* Embedded CV sheet */}
-                <SimpleView />
-              </div>
 
             </div>
           )}
@@ -606,7 +557,7 @@ export default function App() {
                   <CafeScene state={sceneState} bubbleText={speechBubbleText} bgImage={bgImage} />
                 </div>
                 <div className="lg:col-span-5 xl:col-span-6">
-                  <ChatPanel onStateChange={handleSceneUpdate} />
+                  <ChatPanel onStateChange={handleSceneUpdate} onNavigate={selectPage} />
                 </div>
               </div>
             </div>
@@ -628,14 +579,8 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* Character visual companion is kept present to satisfy user intent */}
-                <div className="lg:col-span-4 hidden lg:block sticky top-36">
-                  <CafeScene state={sceneState} bubbleText={speechBubbleText} bgImage={bgImage} />
-                </div>
-                <div className="lg:col-span-12 lg:col-span-8">
-                  <Roadmap />
-                </div>
+              <div className="w-full">
+                <Roadmap />
               </div>
             </div>
           )}
@@ -693,7 +638,7 @@ export default function App() {
               {/* Prompt direct action scheduler */}
               <div className="bg-amber-500/10 border border-amber-500/25 p-4 rounded-2xl flex items-center justify-between flex-wrap gap-4 shadow-xl">
                 <p className="text-xs md:text-sm text-stone-200 font-medium flex items-center gap-2">
-                  <Coffee className="w-4 h-4 text-amber-400 animate-bounce" />
+                  <Coffee className="w-4 h-4 text-amber-400" />
                   <span>Looking to hire Nabil? Secure a quick meeting immediately right onto his schedule.</span>
                 </p>
                 <button
