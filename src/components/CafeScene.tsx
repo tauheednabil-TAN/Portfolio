@@ -10,9 +10,17 @@ interface CafeSceneProps {
   bgImage?: string;
 }
 
-export default function CafeScene({ state, bubbleText, isGenerating }: CafeSceneProps) {
+export default function CafeScene({ state, bubbleText, isGenerating, bgImage }: CafeSceneProps) {
   return (
     <div className="relative w-full h-[340px] md:h-[480px] rounded-3xl overflow-hidden shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] border border-white/15 flex flex-col items-center justify-center select-none bg-zinc-950">
+      {/* Background Image of the chosen scene */}
+      {bgImage && (
+        <div 
+          className="absolute inset-0 bg-cover bg-center opacity-30 transition-all duration-500 pointer-events-none scale-105"
+          style={{ backgroundImage: `url('${bgImage}')` }}
+        />
+      )}
+
       {/* Live customized avatar representing Tauheed Ahmed Nabil */}
       <NabilAvatar state={state} />
       

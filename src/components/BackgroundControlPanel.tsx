@@ -82,7 +82,7 @@ export default function BackgroundControlPanel({
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-16 right-0 w-72 p-5 rounded-2xl liquid-glass border border-white/20 shadow-2xl z-50 text-stone-200 animate-comic-pop">
+        <div className="absolute bottom-16 left-0 w-72 p-5 rounded-2xl liquid-glass border border-white/20 shadow-2xl z-50 text-stone-200 animate-comic-pop">
           <div className="flex items-center justify-between border-b border-white/10 pb-2.5 mb-3.5">
             <span className="font-bold text-xs font-display flex items-center gap-2 text-amber-400">
               <Sliders className="w-4 h-4" /> Aesthetic Panel

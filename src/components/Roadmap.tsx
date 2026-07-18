@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { RoadmapNode } from "../types.js";
 import { CheckCircle, AlertCircle, Lock, ChevronRight, Briefcase, GraduationCap, MapPin, Sparkles, BookOpen, Layers } from "lucide-react";
+import dbData from "../db/db.json";
 
 interface RoadmapProps {
   onNodeClick?: (node: RoadmapNode) => void;
@@ -22,9 +23,12 @@ export default function Roadmap({ onNodeClick }: RoadmapProps) {
       if (response.ok) {
         const data: RoadmapNode[] = await response.json();
         setNodes(data);
+      } else {
+        throw new Error("Failed to fetch");
       }
     } catch (error) {
-      console.error("Error loading roadmap:", error);
+      console.warn("Error loading roadmap, using static fallback:", error);
+      setNodes(dbData.roadmap_nodes || []);
     } finally {
       setLoading(false);
     }

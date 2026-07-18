@@ -471,7 +471,7 @@ export default function App() {
                       id="tauheed-avatar-img"
                       src={avatarUrl} 
                       alt="Tauheed Ahmed Nabil" 
-                      className="w-full h-full object-cover rounded-full" 
+                      className="w-full h-full object-cover rounded-full transition-transform duration-300 ease-out" 
                       referrerPolicy="no-referrer" 
                     />
                   ) : (

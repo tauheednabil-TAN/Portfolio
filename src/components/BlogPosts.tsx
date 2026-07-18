@@ -21,6 +21,7 @@ import {
   VolumeX,
   Play
 } from "lucide-react";
+import dbData from "../db/db.json";
 
 export default function BlogPosts() {
   const [posts, setPosts] = useState<BlogPost[]>([]);
@@ -68,9 +69,32 @@ export default function BlogPosts() {
           ];
         });
         setComments(defaultComments);
+      } else {
+        throw new Error("Failed to fetch");
       }
     } catch (err) {
-      console.error("Error loading posts:", err);
+      console.warn("Could not retrieve live posts, using static fallback:", err);
+      const data = dbData.posts || [];
+      setPosts(data);
+      
+      const defaultComments: Record<string, any[]> = {};
+      data.forEach((p: BlogPost) => {
+        defaultComments[p.id] = [
+          {
+            id: `comment-1-${p.id}`,
+            author: "Elena Rostova (AI Researcher)",
+            text: "Incredible post, Nabil! The agentic paradigms you discussed are game-changing. Sharing with my team! 🚀",
+            created_at: new Date(new Date(p.created_at).getTime() + 1800000).toISOString()
+          },
+          {
+            id: `comment-2-${p.id}`,
+            author: "Marcus Vance (DevOps Lead)",
+            text: "Top-tier design. Did you use the latest Gemini models for text chunking? Really seamless integration with the café theme.",
+            created_at: new Date(new Date(p.created_at).getTime() + 3600000).toISOString()
+          }
+        ];
+      });
+      setComments(defaultComments);
     } finally {
       setLoading(false);
     }

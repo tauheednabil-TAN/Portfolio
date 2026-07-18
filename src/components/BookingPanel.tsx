@@ -140,8 +140,26 @@ export default function BookingPanel({ onStateChange }: BookingPanelProps) {
         throw new Error("Failed to submit");
       }
     } catch (err) {
-      console.error(err);
-      onStateChange("confused", "Oh no! There was a glitch in the booking machine! 😅 Let's try picking another slot.");
+      console.warn("Backend server offline or not available, performing client-side local simulation fallback:", err);
+      try {
+        const simulated = JSON.parse(localStorage.getItem("simulated_bookings") || "[]");
+        simulated.push({
+          id: `sim-${Date.now()}`,
+          visitor_name: name,
+          visitor_email: email,
+          note,
+          mode,
+          start_ts: selectedSlot.startIso,
+          end_ts: selectedSlot.endIso,
+          status: "pending",
+          created_at: new Date().toISOString()
+        });
+        localStorage.setItem("simulated_bookings", JSON.stringify(simulated));
+      } catch (e) {
+        console.error("Failed to write simulated booking to localStorage", e);
+      }
+      setSuccess(true);
+      onStateChange("celebrate", `YAY! Meeting successfully simulated with ${name}! Since this is a serverless static preview, your slot is saved in your local storage for demonstration! (⌐■_■) ☕`);
     } finally {
       setSubmitting(false);
     }
