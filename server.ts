@@ -305,12 +305,64 @@ async function declineBookingById(bookingId: string) {
   return updated;
 }
 
-// Simple security check helper
+// Simple security check helper and stateless session token logic
 const ADMIN_PASSWORD_FALLBACK = "nabil123";
 
+// Generate a cryptographically secure key derived from the admin password/hash
+// This is stable across Vercel serverless cold-starts and multiple instances
+const JWT_SECRET = crypto.createHash("sha256").update(
+  (process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD_HASH || ADMIN_PASSWORD_FALLBACK) + "nabil_secure_salt_2026"
+).digest("hex");
+
+function generateToken(): string {
+  const payload = {
+    exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // Valid for 7 days
+    user: "admin",
+  };
+  const payloadStr = Buffer.from(JSON.stringify(payload)).toString("base64");
+  const signature = crypto.createHmac("sha256", JWT_SECRET).update(payloadStr).digest("hex");
+  return `${payloadStr}.${signature}`;
+}
+
+function verifyToken(token: string | undefined): boolean {
+  if (!token) return false;
+  const parts = token.split(".");
+  if (parts.length !== 2) return false;
+  const [payloadStr, signature] = parts;
+  const calculatedSignature = crypto.createHmac("sha256", JWT_SECRET).update(payloadStr).digest("hex");
+  if (signature !== calculatedSignature) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(payloadStr, "base64").toString("utf-8"));
+    if (payload.exp && payload.exp > Date.now()) {
+      return true;
+    }
+  } catch (err) {
+    return false;
+  }
+  return false;
+}
+
 function isAdmin(req: express.Request): boolean {
-  const token = req.headers.authorization?.split(" ")[1];
-  return !!token && ADMIN_SESSIONS.has(token);
+  // 1. Try checking Authorization header
+  let token = req.headers.authorization?.split(" ")[1];
+  if (verifyToken(token)) return true;
+
+  // 2. Try checking Cookie
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const cookies = cookieHeader.split(";");
+    for (const cookie of cookies) {
+      const [key, val] = cookie.trim().split("=");
+      if (key === "admin_token" && val) {
+        if (verifyToken(val)) return true;
+      }
+    }
+  }
+
+  // 3. Fallback to legacy sessions for tests/backward-compatibility
+  if (token && ADMIN_SESSIONS.has(token)) return true;
+
+  return false;
 }
 
 // Admin Middleware
@@ -357,8 +409,18 @@ app.post("/api/auth/login", (req, res) => {
   }
 
   if (isValid) {
-    const sessionToken = crypto.randomBytes(32).toString("hex");
+    const sessionToken = generateToken();
     ADMIN_SESSIONS.add(sessionToken);
+
+    // Set cookie on the response so that the browser automatically sends it back and persists it across refreshes!
+    res.cookie("admin_token", sessionToken, {
+      httpOnly: true,
+      secure: true, // Required for secure iframe context (HTTPS)
+      sameSite: "none", // Required for cross-site iframe context
+      path: "/",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     res.json({ success: true, token: sessionToken });
   } else {
     res.status(401).json({ success: false, error: "Invalid admin password" });
@@ -367,7 +429,28 @@ app.post("/api/auth/login", (req, res) => {
 
 // Admin Check Session
 app.get("/api/auth/check", (req, res) => {
-  res.json({ isAdmin: isAdmin(req) });
+  const admin = isAdmin(req);
+  let verifiedToken = null;
+  if (admin) {
+    // Extract token
+    let token = req.headers.authorization?.split(" ")[1];
+    if (verifyToken(token)) {
+      verifiedToken = token;
+    } else {
+      const cookieHeader = req.headers.cookie;
+      if (cookieHeader) {
+        const cookies = cookieHeader.split(";");
+        for (const cookie of cookies) {
+          const [key, val] = cookie.trim().split("=");
+          if (key === "admin_token" && val && verifyToken(val)) {
+            verifiedToken = val;
+            break;
+          }
+        }
+      }
+    }
+  }
+  res.json({ isAdmin: admin, token: verifiedToken });
 });
 
 // Admin Logout
@@ -376,6 +459,15 @@ app.post("/api/auth/logout", (req, res) => {
   if (token) {
     ADMIN_SESSIONS.delete(token);
   }
+  
+  // Clear the cookie
+  res.clearCookie("admin_token", {
+    path: "/",
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+  });
+  
   res.json({ success: true });
 });
 

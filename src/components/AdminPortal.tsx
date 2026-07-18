@@ -3,7 +3,7 @@ import { BlogPost, RoadmapNode, Booking, KnowledgeChunk, Settings, ParsedCV } fr
 import { Lock, Eye, EyeOff, Save, Trash2, Calendar, BookOpen, Layers, Database, Settings as SettingsIcon, LogOut, Plus, Check, X, Shield, Upload, Pencil, FileText, Loader } from "lucide-react";
 
 export default function AdminPortal() {
-  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem("nabil_admin_token"));
+  const [token, setToken] = useState<string | null>(() => localStorage.getItem("nabil_admin_token"));
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
@@ -189,6 +189,30 @@ export default function AdminPortal() {
   };
 
   useEffect(() => {
+    // Check if the server already has an active, valid session cookie on mount
+    const verifyServerSession = async () => {
+      try {
+        const res = await fetch("/api/auth/check");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.isAdmin && data.token) {
+            setToken(data.token);
+            localStorage.setItem("nabil_admin_token", data.token);
+          } else {
+            // Server session is invalid/expired; clear local token
+            setToken(null);
+            localStorage.removeItem("nabil_admin_token");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to verify server session:", err);
+      }
+    };
+
+    verifyServerSession();
+  }, []);
+
+  useEffect(() => {
     if (token) {
       loadAdminData();
     }
@@ -246,7 +270,7 @@ export default function AdminPortal() {
 
       if (res.ok) {
         const data = await res.json();
-        sessionStorage.setItem("nabil_admin_token", data.token);
+        localStorage.setItem("nabil_admin_token", data.token);
         setToken(data.token);
         setPassword("");
       } else {
@@ -265,7 +289,7 @@ export default function AdminPortal() {
         headers: { Authorization: `Bearer ${token}` },
       });
     }
-    sessionStorage.removeItem("nabil_admin_token");
+    localStorage.removeItem("nabil_admin_token");
     setToken(null);
   };
 
