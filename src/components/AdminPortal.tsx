@@ -484,7 +484,7 @@ export default function AdminPortal() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Admin Password (default: nabil123)"
+              placeholder="Admin Password"
               className="w-full pl-9 pr-4 py-2 bg-black/40 border border-white/10 rounded-xl focus:border-amber-500/50 focus:outline-none text-xs md:text-sm text-stone-100"
             />
           </div>

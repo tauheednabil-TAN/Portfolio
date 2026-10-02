@@ -46,6 +46,16 @@ app.use((req, res, next) => {
   next();
 });
 
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 // Support up to 50MB uploads for photos and video files
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -62,9 +72,6 @@ try {
 
 // Serve uploaded media statically
 app.use("/uploads", express.static(uploadsDir));
-
-// Session store in-memory for admin (Simple and secure for this sandbox)
-const ADMIN_SESSIONS = new Set<string>();
 
 // Lazy-initialized Gemini client
 let geminiClient: GoogleGenAI | null = null;
@@ -283,6 +290,7 @@ async function declineBookingById(bookingId: string) {
 
   // Send decline/cancellation email via Gmail API
   const visitorEmailSubject = `☕ Update on your Café Sync Request`;
+  const formattedDeclineDate = new Date(booking.start_ts).toLocaleString("en-US", { timeZone: "Europe/Copenhagen", dateStyle: "full", timeStyle: "short" });
   const visitorEmailContent = `
     <div style="font-family: system-ui, -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e6dfd5; border-radius: 16px; background-color: #fafaf9; color: #443c35;">
       <div style="text-align: center; border-bottom: 2px solid #e6dfd5; padding-bottom: 16px; margin-bottom: 20px;">
@@ -291,8 +299,8 @@ async function declineBookingById(bookingId: string) {
         <p style="margin: 4px 0 0 0; font-size: 13px; color: #b45309; font-family: monospace; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Status Update</p>
       </div>
       
-      <p style="font-size: 15px; line-height: 1.6;">Hi ${booking.visitor_name},</p>
-      <p style="font-size: 15px; line-height: 1.6;">Unfortunately, Tauheed is unable to accept your requested Café Sync on <strong>${new Date(booking.start_ts).toLocaleString("en-US", { timeZone: "Europe/Copenhagen", dateStyle: "full", timeStyle: "short" })} Copenhagen Time</strong> due to calendar conflicts or coursework load.</p>
+      <p style="font-size: 15px; line-height: 1.6;">Hi ${escapeHtml(booking.visitor_name)},</p>
+      <p style="font-size: 15px; line-height: 1.6;">Unfortunately, Tauheed is unable to accept your requested Café Sync on <strong>${escapeHtml(formattedDeclineDate)} Copenhagen Time</strong> due to calendar conflicts or coursework load.</p>
       
       <p style="font-size: 15px; line-height: 1.6;">Please feel free to revisit the portfolio applet and select another convenient slot. We would love to find a time to sync!</p>
       
@@ -305,49 +313,147 @@ async function declineBookingById(bookingId: string) {
   return updated;
 }
 
-// Simple security check helper and stateless session token logic
-const ADMIN_PASSWORD_FALLBACK = "nabil123";
+// HTML Escaping Helper to sanitize user inputs in emails and HTML views
+function escapeHtml(str: any): string {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-// Generate a cryptographically secure key derived from the admin password/hash
-// This is stable across Vercel serverless cold-starts and multiple instances
-const JWT_SECRET = crypto.createHash("sha256").update(
-  (process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD_HASH || ADMIN_PASSWORD_FALLBACK) + "nabil_secure_salt_2026"
-).digest("hex");
+// Helper to determine the client IP address reliably across proxies
+function getClientIp(req: express.Request): string {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (typeof forwarded === "string" && forwarded.trim()) {
+    return forwarded.split(",")[0].trim();
+  }
+  if (Array.isArray(forwarded) && forwarded.length > 0) {
+    return forwarded[0].split(",")[0].trim();
+  }
+  const realIp = req.headers["x-real-ip"];
+  if (typeof realIp === "string" && realIp.trim()) {
+    return realIp.trim();
+  }
+  return req.socket.remoteAddress || "127.0.0.1";
+}
+
+// In-memory brute-force protection tracking
+interface LoginRateLimitRecord {
+  fails: number;
+  windowStart: number;
+  lockedUntil: number;
+  lockCount: number;
+}
+const loginRateLimitMap = new Map<string, LoginRateLimitRecord>();
+
+function pruneLoginRateLimits() {
+  const now = Date.now();
+  for (const [ip, rec] of loginRateLimitMap.entries()) {
+    if (rec.lockedUntil > now) continue;
+    if (now - rec.windowStart > 24 * 60 * 60 * 1000) {
+      loginRateLimitMap.delete(ip);
+    }
+  }
+}
+
+// Lazy admin password and hash configuration reader
+function getAdminAuthConfig(): { isConfigured: boolean; expectedHashBuffer: Buffer | null; storedValue: string } {
+  const envPassword = process.env.ADMIN_PASSWORD;
+  const envHash = process.env.ADMIN_PASSWORD_HASH;
+  const storedValue = (envPassword && envPassword.trim()) ? envPassword.trim() :
+                      (envHash && envHash.trim()) ? envHash.trim() : "";
+
+  if (!storedValue) {
+    return { isConfigured: false, expectedHashBuffer: null, storedValue: "" };
+  }
+
+  const is64Hex = /^[a-f0-9]{64}$/i.test(storedValue);
+  if (!is64Hex && storedValue.length < 8) {
+    return { isConfigured: false, expectedHashBuffer: null, storedValue: "" };
+  }
+
+  const expectedHashBuffer = is64Hex
+    ? Buffer.from(storedValue.toLowerCase(), "hex")
+    : crypto.createHash("sha256").update(storedValue, "utf8").digest();
+
+  return { isConfigured: true, expectedHashBuffer, storedValue };
+}
+
+// Session signing secret derived lazily
+function getAdminSessionSecret(): string {
+  const envSecret = process.env.ADMIN_SESSION_SECRET;
+  if (envSecret && envSecret.length >= 32) {
+    return envSecret;
+  }
+  const { isConfigured, storedValue } = getAdminAuthConfig();
+  if (isConfigured) {
+    return crypto.createHash("sha256").update("admin-session-v2:" + storedValue).digest("hex");
+  }
+  return crypto.createHash("sha256").update("admin-session-v2:unconfigured-key").digest("hex");
+}
 
 function generateToken(): string {
+  const now = Math.floor(Date.now() / 1000);
   const payload = {
-    exp: Date.now() + 7 * 24 * 60 * 60 * 1000, // Valid for 7 days
-    user: "admin",
+    sub: "admin",
+    iat: now,
+    exp: now + 12 * 3600, // 12 hours from now
   };
-  const payloadStr = Buffer.from(JSON.stringify(payload)).toString("base64");
-  const signature = crypto.createHmac("sha256", JWT_SECRET).update(payloadStr).digest("hex");
+  const payloadStr = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  const secret = getAdminSessionSecret();
+  const signature = crypto.createHmac("sha256", secret).update(payloadStr).digest("base64url");
   return `${payloadStr}.${signature}`;
 }
 
 function verifyToken(token: string | undefined): boolean {
-  if (!token) return false;
-  const parts = token.split(".");
-  if (parts.length !== 2) return false;
-  const [payloadStr, signature] = parts;
-  const calculatedSignature = crypto.createHmac("sha256", JWT_SECRET).update(payloadStr).digest("hex");
-  if (signature !== calculatedSignature) return false;
+  if (!token || typeof token !== "string") return false;
   try {
-    const payload = JSON.parse(Buffer.from(payloadStr, "base64").toString("utf-8"));
-    if (payload.exp && payload.exp > Date.now()) {
-      return true;
+    const parts = token.split(".");
+    if (parts.length !== 2) return false;
+    const [payloadStr, signature] = parts;
+    const secret = getAdminSessionSecret();
+    const expectedSignature = crypto.createHmac("sha256", secret).update(payloadStr).digest("base64url");
+
+    const sigBuf = Buffer.from(signature);
+    const expectedSigBuf = Buffer.from(expectedSignature);
+
+    if (sigBuf.length !== expectedSigBuf.length) {
+      return false;
     }
+    if (!crypto.timingSafeEqual(sigBuf, expectedSigBuf)) {
+      return false;
+    }
+
+    const payload = JSON.parse(Buffer.from(payloadStr, "base64url").toString("utf8"));
+    if (!payload || payload.sub !== "admin") {
+      return false;
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!payload.exp || payload.exp <= nowSec) {
+      return false;
+    }
+    return true;
   } catch (err) {
     return false;
   }
-  return false;
 }
 
 function isAdmin(req: express.Request): boolean {
-  // 1. Try checking Authorization header
-  let token = req.headers.authorization?.split(" ")[1];
-  if (verifyToken(token)) return true;
+  // 1. Try checking Authorization header (Bearer token)
+  const authHeader = req.headers.authorization;
+  if (authHeader && typeof authHeader === "string") {
+    const parts = authHeader.split(" ");
+    if (parts.length === 2 && parts[0].toLowerCase() === "bearer") {
+      if (verifyToken(parts[1])) return true;
+    } else if (verifyToken(parts[0])) {
+      return true;
+    }
+  }
 
-  // 2. Try checking Cookie
+  // 2. Try checking Cookie (admin_token)
   const cookieHeader = req.headers.cookie;
   if (cookieHeader) {
     const cookies = cookieHeader.split(";");
@@ -358,9 +464,6 @@ function isAdmin(req: express.Request): boolean {
       }
     }
   }
-
-  // 3. Fallback to legacy sessions for tests/backward-compatibility
-  if (token && ADMIN_SESSIONS.has(token)) return true;
 
   return false;
 }
@@ -382,61 +485,96 @@ app.get("/api/health", (req, res) => {
 });
 
 // Admin Login
-app.post("/api/auth/login", (req, res) => {
-  const { password } = req.body;
-  const envHash = process.env.ADMIN_PASSWORD_HASH;
-  const envPlain = process.env.ADMIN_PASSWORD;
+app.post("/api/auth/login", async (req, res) => {
+  pruneLoginRateLimits();
+  const ip = getClientIp(req);
+  const now = Date.now();
 
-  let isValid = false;
-
-  // 1. Check against process.env.ADMIN_PASSWORD (if set)
-  if (envPlain && password === envPlain) {
-    isValid = true;
+  let rec = loginRateLimitMap.get(ip);
+  if (!rec) {
+    rec = { fails: 0, windowStart: now, lockedUntil: 0, lockCount: 0 };
+    loginRateLimitMap.set(ip, rec);
   }
 
-  // 2. Check against process.env.ADMIN_PASSWORD_HASH (if set)
-  if (!isValid && envHash) {
-    const hash = crypto.createHash("sha256").update(password).digest("hex");
-    // Supports BOTH the SHA-256 hex hash OR a plaintext password configured in the HASH environment variable
-    if (hash === envHash || password === envHash) {
-      isValid = true;
-    }
+  // Check if locked
+  if (rec.lockedUntil > now) {
+    const retryAfterSeconds = Math.ceil((rec.lockedUntil - now) / 1000);
+    res.set("Retry-After", String(retryAfterSeconds));
+    return res.status(429).json({
+      error: "Too many attempts. Try again later.",
+      retryAfterSeconds,
+    });
   }
 
-  // 3. Fallback to standard master password 'nabil123' to guarantee user is never locked out
-  if (!isValid && password === ADMIN_PASSWORD_FALLBACK) {
-    isValid = true;
+  const { password } = req.body || {};
+
+  // Check password input type and length
+  if (typeof password !== "string" || password.length < 1 || password.length > 256) {
+    await new Promise((r) => setTimeout(r, 1000));
+    return res.status(400).json({ success: false, error: "Invalid password format" });
   }
+
+  const authConfig = getAdminAuthConfig();
+  if (!authConfig.isConfigured || !authConfig.expectedHashBuffer) {
+    console.warn("⚠️ Admin login is not configured or plain-text password is shorter than 8 characters.");
+    await new Promise((r) => setTimeout(r, 1000));
+    return res.status(503).json({ success: false, error: "Admin login is not configured." });
+  }
+
+  const inputHash = crypto.createHash("sha256").update(password, "utf8").digest();
+  const isValid = crypto.timingSafeEqual(inputHash, authConfig.expectedHashBuffer);
 
   if (isValid) {
-    const sessionToken = generateToken();
-    ADMIN_SESSIONS.add(sessionToken);
+    // Clear IP record on success
+    loginRateLimitMap.delete(ip);
 
-    // Set cookie on the response so that the browser automatically sends it back and persists it across refreshes!
+    const sessionToken = generateToken();
     res.cookie("admin_token", sessionToken, {
       httpOnly: true,
-      secure: true, // Required for secure iframe context (HTTPS)
-      sameSite: "none", // Required for cross-site iframe context
+      secure: true,
+      sameSite: "none",
       path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      maxAge: 12 * 60 * 60 * 1000, // 12 hours
     });
 
-    res.json({ success: true, token: sessionToken });
+    return res.json({ success: true, token: sessionToken });
   } else {
-    res.status(401).json({ success: false, error: "Invalid admin password" });
+    // Failed attempt: record failure
+    if (now - rec.windowStart > 15 * 60 * 1000) {
+      rec.fails = 1;
+      rec.windowStart = now;
+    } else {
+      rec.fails += 1;
+    }
+
+    if (rec.fails >= 5) {
+      rec.lockCount = (rec.lockCount || 0) + 1;
+      const lockMinutes = Math.min(15 * Math.pow(2, rec.lockCount - 1), 24 * 60);
+      rec.lockedUntil = now + lockMinutes * 60 * 1000;
+      rec.fails = 0;
+      rec.windowStart = rec.lockedUntil;
+    }
+
+    // 1-second delay before every failed response
+    await new Promise((r) => setTimeout(r, 1000));
+    return res.status(401).json({ success: false, error: "Invalid password" });
   }
 });
 
 // Admin Check Session
 app.get("/api/auth/check", (req, res) => {
   const admin = isAdmin(req);
-  let verifiedToken = null;
+  let verifiedToken: string | null = null;
   if (admin) {
-    // Extract token
-    let token = req.headers.authorization?.split(" ")[1];
-    if (verifyToken(token)) {
-      verifiedToken = token;
-    } else {
+    const authHeader = req.headers.authorization;
+    if (authHeader && typeof authHeader === "string") {
+      const parts = authHeader.split(" ");
+      const token = parts.length === 2 && parts[0].toLowerCase() === "bearer" ? parts[1] : parts[0];
+      if (verifyToken(token)) {
+        verifiedToken = token;
+      }
+    }
+    if (!verifiedToken) {
       const cookieHeader = req.headers.cookie;
       if (cookieHeader) {
         const cookies = cookieHeader.split(";");
@@ -455,11 +593,6 @@ app.get("/api/auth/check", (req, res) => {
 
 // Admin Logout
 app.post("/api/auth/logout", (req, res) => {
-  const token = req.headers.authorization?.split(" ")[1];
-  if (token) {
-    ADMIN_SESSIONS.delete(token);
-  }
-  
   // Clear the cookie
   res.clearCookie("admin_token", {
     path: "/",
@@ -950,15 +1083,15 @@ app.post("/api/bookings", async (req, res) => {
           <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c; width: 120px;">Visitor Name:</td>
-              <td style="padding: 6px 0; color: #2d2621;"><strong>${visitor_name}</strong></td>
+              <td style="padding: 6px 0; color: #2d2621;"><strong>${escapeHtml(visitor_name)}</strong></td>
             </tr>
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Email Address:</td>
-              <td style="padding: 6px 0; color: #2d2621;"><a href="mailto:${visitor_email}" style="color: #8c6a4c; text-decoration: none; border-bottom: 1px dashed #8c6a4c;">${visitor_email}</a></td>
+              <td style="padding: 6px 0; color: #2d2621;"><a href="mailto:${escapeHtml(visitor_email)}" style="color: #8c6a4c; text-decoration: none; border-bottom: 1px dashed #8c6a4c;">${escapeHtml(visitor_email)}</a></td>
             </tr>
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Proposed Time:</td>
-              <td style="padding: 6px 0; color: #2d2621; font-family: monospace;"><strong>${formattedDate} Copenhagen Time</strong></td>
+              <td style="padding: 6px 0; color: #2d2621; font-family: monospace;"><strong>${escapeHtml(formattedDate)} Copenhagen Time</strong></td>
             </tr>
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Meeting Mode:</td>
@@ -966,7 +1099,7 @@ app.post("/api/bookings", async (req, res) => {
             </tr>
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c; vertical-align: top;">Visitor's Note:</td>
-              <td style="padding: 6px 0; color: #5a4f46; font-style: italic;">"${note || "No note left"}"</td>
+              <td style="padding: 6px 0; color: #5a4f46; font-style: italic;">"${escapeHtml(note || "No note left")}"</td>
             </tr>
           </table>
         </div>
@@ -998,14 +1131,14 @@ app.post("/api/bookings", async (req, res) => {
           <p style="margin: 4px 0 0 0; font-size: 13px; color: #86705d; font-family: monospace; text-transform: uppercase; letter-spacing: 1px;">Request Confirmed</p>
         </div>
         
-        <p style="font-size: 15px; line-height: 1.6;">Hi ${visitor_name},</p>
+        <p style="font-size: 15px; line-height: 1.6;">Hi ${escapeHtml(visitor_name)},</p>
         <p style="font-size: 15px; line-height: 1.6;">Thank you for requesting a 30-minute Café Sync with Tauheed! Your request has been recorded and sent to Tauheed's dashboard for immediate review.</p>
         
         <div style="background-color: #f5f0eb; border: 1px solid #e2d8cd; padding: 16px; border-radius: 12px; margin: 20px 0;">
           <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c; width: 120px;">Proposed Time:</td>
-              <td style="padding: 6px 0; color: #2d2621; font-family: monospace;"><strong>${formattedDate} Copenhagen Time</strong></td>
+              <td style="padding: 6px 0; color: #2d2621; font-family: monospace;"><strong>${escapeHtml(formattedDate)} Copenhagen Time</strong></td>
             </tr>
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #8c6a4c;">Meeting Mode:</td>
@@ -1026,7 +1159,19 @@ app.post("/api/bookings", async (req, res) => {
     `;
     await sendGmailEmail(visitor_email, visitorSubject, visitorEmailHtml);
 
-    res.json({ success: true, booking, approveLink, declineLink });
+    // Return sanitized booking info without leaking approval tokens or action links
+    res.json({
+      success: true,
+      booking: {
+        id: booking.id,
+        visitor_name: booking.visitor_name,
+        visitor_email: booking.visitor_email,
+        mode: booking.mode,
+        start_ts: booking.start_ts,
+        end_ts: booking.end_ts,
+        status: booking.status,
+      },
+    });
   } catch (error) {
     console.error("Booking error:", error);
     res.status(500).json({ error: "Failed to create booking" });
@@ -1036,8 +1181,8 @@ app.post("/api/bookings", async (req, res) => {
 // Booking Action Links (Called via email / one-click)
 app.get("/api/bookings/approve", async (req, res) => {
   const { token } = req.query;
-  if (!token || typeof token !== "string") {
-    return res.status(400).send("Missing token");
+  if (!token || typeof token !== "string" || !/^[a-f0-9]{48}$/i.test(token)) {
+    return res.status(400).send("Invalid or missing token");
   }
 
   const booking = await getBookingByToken(token);
@@ -1046,7 +1191,7 @@ app.get("/api/bookings/approve", async (req, res) => {
   }
 
   if (booking.status !== "pending") {
-    return res.send(`<html><body><h2>This booking request has already been ${booking.status}.</h2></body></html>`);
+    return res.send(`<html><body><h2>This booking request has already been ${escapeHtml(booking.status)}.</h2></body></html>`);
   }
 
   // Approve and trigger Google Workspace (GCal + Meet + Gmail confirmation)
@@ -1054,6 +1199,7 @@ app.get("/api/bookings/approve", async (req, res) => {
   const meetLink = result?.meetLink || null;
 
   res.send(`
+    <!doctype html>
     <html>
       <head>
         <title>Booking Confirmed!</title>
@@ -1066,10 +1212,10 @@ app.get("/api/bookings/approve", async (req, res) => {
       </head>
       <body>
         <div class="card">
-          <h2>☕ Meeting Confirmed with ${booking.visitor_name}!</h2>
+          <h2>☕ Meeting Confirmed with ${escapeHtml(booking.visitor_name)}!</h2>
           <p>The status of this slot has been updated to <strong>Confirmed</strong> in your system.</p>
-          ${meetLink ? `<p><strong>Google Meet Link:</strong> <a href="${meetLink}" target="_blank">${meetLink}</a></p>` : `<p>In-person meeting in Copenhagen is set!</p>`}
-          <p>The attendee (${booking.visitor_email}) has been notified via email and a Google Calendar invitation has been dispatched!</p>
+          ${meetLink ? `<p><strong>Google Meet Link:</strong> <a href="${escapeHtml(meetLink)}" target="_blank" rel="noopener noreferrer">${escapeHtml(meetLink)}</a></p>` : `<p>In-person meeting in Copenhagen is set!</p>`}
+          <p>The attendee (${escapeHtml(booking.visitor_email)}) has been notified via email and a Google Calendar invitation has been dispatched!</p>
           <a href="/" class="btn">Go back to Café</a>
         </div>
       </body>
@@ -1079,8 +1225,8 @@ app.get("/api/bookings/approve", async (req, res) => {
 
 app.get("/api/bookings/decline", async (req, res) => {
   const { token } = req.query;
-  if (!token || typeof token !== "string") {
-    return res.status(400).send("Missing token");
+  if (!token || typeof token !== "string" || !/^[a-f0-9]{48}$/i.test(token)) {
+    return res.status(400).send("Invalid or missing token");
   }
 
   const booking = await getBookingByToken(token);
@@ -1089,13 +1235,14 @@ app.get("/api/bookings/decline", async (req, res) => {
   }
 
   if (booking.status !== "pending") {
-    return res.send(`<html><body><h2>This booking request has already been ${booking.status}.</h2></body></html>`);
+    return res.send(`<html><body><h2>This booking request has already been ${escapeHtml(booking.status)}.</h2></body></html>`);
   }
 
   // Decline and notify
   await declineBookingById(booking.id);
 
   res.send(`
+    <!doctype html>
     <html>
       <head>
         <title>Booking Declined</title>
@@ -1109,7 +1256,7 @@ app.get("/api/bookings/decline", async (req, res) => {
       <body>
         <div class="card">
           <h2>☕ Meeting Declined</h2>
-          <p>Meeting request from ${booking.visitor_name} has been declined. They have been notified to pick another slot.</p>
+          <p>Meeting request from ${escapeHtml(booking.visitor_name)} has been declined. They have been notified to pick another slot.</p>
           <a href="/" class="btn">Go back to Café</a>
         </div>
       </body>
