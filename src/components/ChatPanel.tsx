@@ -78,6 +78,35 @@ export default function ChatPanel({ onStateChange, onNavigate }: ChatPanelProps)
   ]);
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep the chat box ready to type, like ChatGPT. preventScroll stops the page from jumping.
+  const focusInput = () => {
+    requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+  };
+
+  // Desktop only: put the cursor in the chat box when the chat page opens.
+  // (On phones this would pop the keyboard up unasked, so we skip it there.)
+  const isDesktop = () => window.matchMedia("(pointer: fine)").matches;
+
+  useEffect(() => {
+    if (isDesktop()) focusInput();
+  }, []);
+
+  // Type anywhere on the chat page and the letters go straight into the chat box.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return;
+      if (e.key.length !== 1) return; // only real characters, not Tab/Enter/arrows
+      const el = document.activeElement as HTMLElement | null;
+      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+      if (e.key === " " && el && el !== document.body) return; // let Space still press a focused button
+      inputRef.current?.focus({ preventScroll: true }); // the key press then lands in the chat box
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Fetch dynamic suggestions on mount
   useEffect(() => {
@@ -97,9 +126,11 @@ export default function ChatPanel({ onStateChange, onNavigate }: ChatPanelProps)
     loadSuggestions();
   }, []);
 
+  // Scroll only the message list (not the whole page) to the newest message.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    const box = messagesContainerRef.current;
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+  }, [messages, loading]);
 
   // Handle typing state change
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -113,7 +144,9 @@ export default function ChatPanel({ onStateChange, onNavigate }: ChatPanelProps)
   };
 
   const handleSend = async (textToSend: string, pdfName?: string) => {
+    if (loading) return; // one message at a time; whatever is typed stays in the box
     if (!textToSend.trim() && !pdfName) return;
+    const keepFocus = isDesktop() || document.activeElement === inputRef.current;
 
     const userMessage: Message = {
       sender: "user",
@@ -349,6 +382,7 @@ Would you like to know more about this specific topic, or shall we **align our c
       onStateChange(state, text);
     } finally {
       setLoading(false);
+      if (keepFocus) focusInput(); // cursor goes straight back into the chat box
     }
   };
 
@@ -366,6 +400,7 @@ Would you like to know more about this specific topic, or shall we **align our c
       }
     ]);
     onStateChange("welcome", "Welcome! How can I assist you with AI and security today? ✨");
+    focusInput();
   };
 
   return (
@@ -386,7 +421,7 @@ Would you like to know more about this specific topic, or shall we **align our c
       </div>
 
       {/* Messages Scrolling log */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-black/15">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-black/15">
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -451,6 +486,7 @@ Would you like to know more about this specific topic, or shall we **align our c
         {suggestions.map((s, idx) => (
           <button
             key={idx}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => handleSend(s)}
             disabled={loading}
             className="px-3 py-1.5 text-[10px] md:text-[11px] font-medium font-sans text-stone-300 bg-zinc-900/50 hover:bg-zinc-800 border border-white/10 rounded-full transition-all shadow-sm flex-shrink-0 cursor-pointer hover:border-amber-500/30 hover:text-stone-100"
@@ -463,15 +499,19 @@ Would you like to know more about this specific topic, or shall we **align our c
       {/* Input bar */}
       <form onSubmit={handleSubmit} className="p-3 bg-white/[0.01] backdrop-blur-md border-t border-white/10 flex gap-2">
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={handleInputChange}
           placeholder="Ask Tauheed a question..."
-          disabled={loading}
+          aria-label="Message Tauheed"
+          autoComplete="off"
+          enterKeyHint="send"
           className="flex-1 px-3.5 py-2.5 bg-black/45 border border-white/10 rounded-xl focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/30 text-stone-100 text-xs md:text-sm font-sans placeholder-stone-500 transition-all"
         />
         <button
           type="submit"
+          onMouseDown={(e) => e.preventDefault()}
           disabled={loading || !input.trim()}
           className="px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-stone-950 font-black rounded-xl border border-amber-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-30 disabled:hover:scale-100 active:scale-95 text-xs font-display shadow-md shadow-amber-900/10"
         >
