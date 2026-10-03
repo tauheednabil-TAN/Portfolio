@@ -6,7 +6,6 @@ import Roadmap from "./components/Roadmap.tsx";
 import BlogPosts from "./components/BlogPosts.tsx";
 import BookingPanel from "./components/BookingPanel.tsx";
 import SimpleView from "./components/SimpleView.tsx";
-import AdminPortal from "./components/AdminPortal.tsx";
 import BackgroundControlPanel from "./components/BackgroundControlPanel.tsx";
 import { permanentAvatar } from "./components/avatar_data.ts";
 import { 
@@ -18,7 +17,6 @@ import {
   MessageSquare, 
   Clock, 
   FileText, 
-  Settings, 
   Sparkles, 
   Compass, 
   BookOpen, 
@@ -42,7 +40,7 @@ export default function App() {
     return saved ? parseFloat(saved) : 0.4;
   });
 
-  const [activePage, setActivePage] = useState<"hub" | "chat" | "roadmap" | "blog" | "booking" | "cv" | "admin">("hub");
+  const [activePage, setActivePage] = useState<"hub" | "chat" | "roadmap" | "blog" | "booking" | "cv">("hub");
   const [sceneState, setSceneState] = useState<SceneState>("welcome");
   const [speechBubbleText, setSpeechBubbleText] = useState<string>("Welcome to my virtual café! ☕ Drop an anchor, pull up a stool, and let's chat about my projects, skills, or book a quick calendar sync! (⌐■_■)");
   const [copenhagenTime, setCopenhagenTime] = useState("");
@@ -209,8 +207,6 @@ export default function App() {
       handleSceneUpdate("coffee_invite", "Let's align our calendars! Choose a slot and my system will automatically dispatch a calendar invitation and meeting link. 📅");
     } else if (page === "cv") {
       handleSceneUpdate("celebrate", "Here is my traditional professional CV résumé. Perfect for a quick download or quick recruiter review! 📄");
-    } else if (page === "admin") {
-      handleSceneUpdate("confused", "Secure command deck. Please supply the administrative passcode to access deployment pipelines. 🔐");
     }
   };
 
@@ -316,18 +312,7 @@ export default function App() {
             <FileText className="w-4 h-4 text-amber-500" />
             <span className="text-xs font-bold font-display">Recruiter Quick-CV</span>
           </button>
-          
-          <button
-            onClick={() => selectPage("admin")}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-left flex items-center gap-2.5 border transition-all cursor-pointer ${
-              activePage === "admin"
-                ? "bg-amber-600/20 border-amber-500/30 text-amber-300"
-                : "bg-transparent border-transparent text-stone-400 hover:text-stone-100 hover:bg-white/5"
-            }`}
-          >
-            <Settings className="w-4 h-4 text-stone-500" />
-            <span className="text-xs font-bold font-display">Admin command desk</span>
-          </button>
+
         </div>
       </aside>
 
@@ -373,8 +358,7 @@ export default function App() {
                 { id: "roadmap", label: "🛣️ Milestone Roadmap", desc: "BSc studies & achievements" },
                 { id: "blog", label: "📝 Tech & Security Blog", desc: "Research logs & tutorials" },
                 { id: "booking", label: "📅 Meet with Tauheed", desc: "Auto-synced scheduler" },
-                { id: "cv", label: "📄 Recruiter Quick-CV", desc: "Print-ready resume sheet" },
-                { id: "admin", label: "⚙️ Admin Control Desk", desc: "Server diagnostics" }
+                { id: "cv", label: "📄 Recruiter Quick-CV", desc: "Print-ready resume sheet" }
               ].map((item) => (
                 <button
                   key={item.id}
@@ -412,7 +396,6 @@ export default function App() {
               {activePage === "blog" && "📝 Technical & Cybersecurity Blog"}
               {activePage === "booking" && "📅 Meet with Tauheed"}
               {activePage === "cv" && "📄 Recruiter CV Résumé"}
-              {activePage === "admin" && "⚙️ Secure Operations Terminal"}
             </h2>
           </div>
 
@@ -773,10 +756,7 @@ export default function App() {
             </div>
           )}
 
-          {/* G. PASSWORD-PROTECTED COMMAND PORTAL ADMIN VIEW */}
-          {activePage === "admin" && (
-            <AdminPortal />
-          )}
+
 
         </div>
       </main>

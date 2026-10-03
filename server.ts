@@ -37,11 +37,13 @@ const PORT = 3000;
 
 // Route normalizer for serverless deployments (like Vercel) where route prefixes might be modified/stripped
 app.use((req, res, next) => {
-  const url = req.url;
-  if (!url.startsWith("/api") && !url.startsWith("/uploads")) {
-    const originalUrl = req.url;
-    req.url = "/api" + (originalUrl.startsWith("/") ? "" : "/") + originalUrl;
-    console.log(`[Vercel Route Normalizer] Rewrote ${originalUrl} -> ${req.url}`);
+  if (process.env.VERCEL) {
+    const url = req.url;
+    if (!url.startsWith("/api") && !url.startsWith("/uploads")) {
+      const originalUrl = req.url;
+      req.url = "/api" + (originalUrl.startsWith("/") ? "" : "/") + originalUrl;
+      console.log(`[Vercel Route Normalizer] Rewrote ${originalUrl} -> ${req.url}`);
+    }
   }
   next();
 });

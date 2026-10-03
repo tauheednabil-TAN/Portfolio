@@ -5,7 +5,7 @@ import dbData from "../db/db.json";
 
 interface ChatPanelProps {
   onStateChange: (state: SceneState, text: string) => void;
-  onNavigate?: (page: "hub" | "chat" | "roadmap" | "blog" | "booking" | "cv" | "admin") => void;
+  onNavigate?: (page: "hub" | "chat" | "roadmap" | "blog" | "booking" | "cv") => void;
 }
 
 interface Message {
