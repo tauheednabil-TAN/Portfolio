@@ -724,11 +724,11 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                <div className="lg:col-span-4 hidden lg:block sticky top-36">
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                <div className="xl:col-span-4 hidden xl:block sticky top-6">
                   <CafeScene state={sceneState} bubbleText={speechBubbleText} bgImage={bgImage} />
                 </div>
-                <div className="lg:col-span-12 lg:col-span-8">
+                <div className="xl:col-span-8">
                   <BookingPanel onStateChange={handleSceneUpdate} />
                 </div>
               </div>

@@ -207,25 +207,31 @@ export default function BookingPanel({ onStateChange }: BookingPanelProps) {
               <Calendar className="w-4 h-4 text-amber-500" /> 1. Select a Day
             </label>
 
-            {/* Days Tabs */}
-            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none mb-4">
-              {days.map((d, idx) => (
-                <button
-                  key={d.dateStr}
-                  type="button"
-                  onClick={() => {
-                    setSelectedDayIdx(idx);
-                    setSelectedSlot(null);
-                  }}
-                  className={`px-3.5 py-2 text-xs font-bold rounded-xl flex-shrink-0 cursor-pointer transition-all ${
-                    selectedDayIdx === idx
-                      ? "bg-amber-600/20 text-amber-300 border border-amber-500/40 shadow-md"
-                      : "bg-zinc-900/40 text-stone-300 border border-white/5 hover:bg-zinc-800"
-                  }`}
-                >
-                  {d.displayDay}
-                </button>
-              ))}
+            <div className="grid grid-cols-5 gap-1.5 mb-4">
+              {days.map((d, idx) => {
+                // "Monday, Oct 5" -> "MON" on top, "Oct 5" below, so all 5 days fit without scrolling
+                const [weekday, monthDay] = d.displayDay.split(", ");
+                return (
+                  <button
+                    key={d.dateStr}
+                    type="button"
+                    title={d.displayDay}
+                    aria-label={d.displayDay}
+                    onClick={() => {
+                      setSelectedDayIdx(idx);
+                      setSelectedSlot(null);
+                    }}
+                    className={`py-2 rounded-xl flex flex-col items-center leading-tight cursor-pointer transition-all ${
+                      selectedDayIdx === idx
+                        ? "bg-amber-600/20 text-amber-300 border border-amber-500/40 shadow-md"
+                        : "bg-zinc-900/40 text-stone-300 border border-white/5 hover:bg-zinc-800"
+                    }`}
+                  >
+                    <span className="text-[10px] font-mono uppercase tracking-wider opacity-70">{weekday.slice(0, 3)}</span>
+                    <span className="text-xs font-bold whitespace-nowrap">{monthDay || weekday}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <label className="text-xs font-bold text-stone-300 uppercase font-mono flex items-center gap-1.5 mb-2.5">
